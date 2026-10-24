@@ -1,26 +1,24 @@
 # Aurelia
 
-A responsive digital-wallet UI inspired by the supplied iOS screen references. The Next.js app includes an entry screen, login and account setup, wallet overview, cards, recipients, AI chat, and a guided send-money flow.
+A native React Native wallet UI built with Expo. The app includes welcome and login screens, a multi-step signup flow, a wallet overview, AI chat, cards, recipients, and a guided send-money experience.
 
-## Run locally
+## Run the app
 
 ```bash
 npm install
-npm run dev
+npm start
 ```
 
-## Build the shadcn registry
+Install Expo Go on an iPhone and scan the QR code shown by Expo, or run `npm run ios` with Xcode and the iOS Simulator installed. Android and web previews are also available with `npm run android` and `npm run web`.
 
-The root [`registry.json`](./registry.json) defines the Aurelia component and its source files. Build the distributable registry JSON with:
+## Create a native iOS project
+
+For a generated Xcode project, run:
 
 ```bash
-npm run registry:build
+npx expo prebuild --platform ios
 ```
 
-Deploy the generated `public/r/` directory at the same origin as the app. The registry index will be available at `/r/registry.json`, and the component at `/r/aurelia-wallet.json`. To install the component from a hosted registry, use:
+## Prototype notice
 
-```bash
-npx shadcn@latest add https://your-domain.example/r/aurelia-wallet.json
-```
-
-Publishing these endpoints makes the registry installable; inclusion in any central registry directory requires submitting the hosted registry URL to that directory separately.
+Authentication, account details, face scanning, phone verification, AI responses, and money movement are UI demonstrations only. Connect secure services and implement the required native permissions and compliance before handling real accounts, biometric data, or payments.

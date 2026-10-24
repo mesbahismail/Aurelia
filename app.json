@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Aurelia",
+    "slug": "aurelia-wallet",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aurelia.wallet"
+    },
+    "android": {
+      "package": "com.aurelia.wallet"
+    }
+  }
+}

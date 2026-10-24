@@ -1,26 +1,28 @@
 {
-  "name": "belgrade",
-  "version": "0.1.0",
+  "name": "aurelia",
+  "version": "1.0.0",
   "private": true,
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "registry:build": "npx shadcn@latest build"
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "15.2.0"
+    "@expo/metro-runtime": "~58.0.15",
+    "expo": "^58.0.19",
+    "expo-linear-gradient": "~58.0.0",
+    "expo-status-bar": "~58.0.4",
+    "react": "^19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-web": "^0.21.4"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.2.0",
-    "@eslint/eslintrc": "^3"
+    "@types/react": "~19.2.0",
+    "typescript": "~5.9.2"
   }
 }
