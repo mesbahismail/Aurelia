@@ -11,6 +11,15 @@ npm start
 
 Install Expo Go on an iPhone and scan the QR code shown by Expo, or run `npm run ios` with Xcode and the iOS Simulator installed. Android and web previews are also available with `npm run android` and `npm run web`.
 
+## Deploy to Vercel
+
+Import this repository into Vercel with the repository root as the Root Directory.
+Use Node.js 24.x in the project settings. The included `vercel.json` builds the
+Expo web app with `npm run build`, serves `dist`, and routes browser requests to
+the app. After pushing these files, create a new deployment to apply the configuration.
+
+To check the production build locally, run `npm run build`.
+
 ## Create a native iOS project
 
 For a generated Xcode project, run:
