@@ -1,7 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
+import { ArrowUp, ArrowDown, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, ScanFace, ScanLine, ChevronLeft, ChevronRight, TrendingUp, Sparkles, Wallet, CreditCard, Menu, Plus, Check, X, Smartphone, Landmark, MoreVertical, Pencil, Mic, Users, Clapperboard, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut, CalendarDays, ChartNoAxesColumn, ReceiptText, Info, Search, type LucideIcon } from "./components/icons";
+import { WHITE, GOLD, GOLD_GRADIENT, GOLD_STOPS, DARK_GRADIENT } from "./components/theme";
+import { ExpenseDonut, TrendChart, EXPENSES } from "./components/Charts";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,15 +15,16 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 type AuthScreen = "welcome" | "login" | "signup" | "app";
 type Tab = "wallet" | "recipients" | "cards" | "menu" | "ai";
 
-const GOLD = "#ffb52e";
 const SURFACE = "#262626";
-const MUTED = "#a5a5a5";
+const MUTED = WHITE[64];
+const AURELIA_LOGO = require("./assets/aurelia-logo.png");
 const recipients = [
   ["Emily Johnson", "9638934867458", "👩🏻‍🎤"],
   ["Charlotte Anderson", "9638934867458", "👩🏻‍💼"],
@@ -34,6 +40,16 @@ const suggestions = [
   "Show me the unpaid bills for this month",
 ];
 
+const menuIcons = [Clapperboard, Users, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut];
+function MenuIcon({ index }: { index: number }) {
+  const Icon = menuIcons[index];
+  return <Icon size={22} color={GOLD} strokeWidth={1.8} />;
+}
+function SuggestionIcon({ index }: { index: number }) {
+  const Icon = [ChartNoAxesColumn, ArrowLeftRight, Banknote, ReceiptText][index];
+  return <Icon size={20} color={WHITE[64]} strokeWidth={1.8} />;
+}
+
 function Label({ children, style }: { children: React.ReactNode; style?: object }) {
   return <Text style={[styles.label, style]}>{children}</Text>;
 }
@@ -43,11 +59,15 @@ function ActionButton({
   onPress,
   secondary = false,
   compact = false,
+  white = false,
+  icon: Icon,
 }: {
   children: React.ReactNode;
   onPress: () => void;
   secondary?: boolean;
   compact?: boolean;
+  white?: boolean;
+  icon?: LucideIcon;
 }) {
   return (
     <Pressable
@@ -56,10 +76,13 @@ function ActionButton({
       style={({ pressed }) => [
         styles.actionButton,
         secondary && styles.secondaryButton,
+        white && styles.whiteButton,
         compact && styles.compactButton,
         pressed && styles.pressed,
       ]}
     >
+      {!secondary && !white && <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={StyleSheet.absoluteFill} />}
+      {Icon && <Icon size={18} color={secondary ? "#fff" : "#111"} strokeWidth={1.8} />}
       <Text style={[styles.actionText, secondary && styles.secondaryText]}>{children}</Text>
     </Pressable>
   );
@@ -77,11 +100,11 @@ function Header({
   return (
     <View style={styles.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={styles.headerSide}>
-        <Text style={styles.headerIcon}>{onBack ? "‹" : ""}</Text>
+        {onBack ? <ChevronLeft size={28} color="#fff" strokeWidth={1.8} /> : <Sparkles size={22} color="#fff" strokeWidth={1.8} />}
       </Pressable>
       <Text style={styles.headerTitle}>{title}</Text>
       <View style={[styles.headerSide, styles.headerRight]}>
-        {right ?? <Text style={styles.headerIcon}>{onBack ? "" : "↗"}</Text>}
+        {right !== undefined ? right : !onBack && <TrendingUp size={23} color="#fff" strokeWidth={1.8} />}
       </View>
     </View>
   );
@@ -104,10 +127,10 @@ function Progress({ active, labels }: { active: number; labels: string[] }) {
                   current && styles.progressCurrent,
                 ]}
               >
-                {complete && <Text style={styles.progressCheck}>✓</Text>}
+                {complete && <Check size={16} color="#17120b" strokeWidth={1.6} />}
               </View>
               {index < labels.length - 1 && (
-                <View style={[styles.progressConnector, index + 1 < active && styles.progressConnectorDone]} />
+                <View style={[styles.progressConnector, index < active && styles.progressConnectorDone]} />
               )}
             </View>
             <Text style={[styles.progressLabel, complete && styles.goldText]}>{label}</Text>
@@ -125,6 +148,8 @@ function Field({
   secure,
   keyboardType,
   onChangeText,
+  boxed = false,
+  currency,
 }: {
   label: string;
   value?: string;
@@ -132,10 +157,13 @@ function Field({
   secure?: boolean;
   keyboardType?: "default" | "email-address" | "numeric";
   onChangeText?: (text: string) => void;
+  boxed?: boolean;
+  currency?: string;
 }) {
   return (
-    <View style={styles.field}>
+    <View style={[styles.field, boxed && styles.boxedField]}>
       <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.inputRow, boxed && styles.boxedInput]}>
       <TextInput
         accessibilityLabel={label}
         autoCapitalize={keyboardType === "email-address" ? "none" : "sentences"}
@@ -144,18 +172,23 @@ function Field({
         placeholder={placeholder}
         placeholderTextColor="#777"
         secureTextEntry={secure}
-        style={styles.fieldInput}
+        style={[styles.fieldInput, boxed && styles.amountInput]}
         value={value}
       />
+      {currency && <Text style={styles.currencyLabel}>{currency}</Text>}
+      </View>
     </View>
   );
 }
 
 function Surface({ children, style }: { children: React.ReactNode; style?: object }) {
-  return <View style={[styles.surface, style]}>{children}</View>;
+  return <LinearGradient colors={["#282828", "#242424"]} style={[styles.surface, style]}>{children}</LinearGradient>;
 }
 
 function AppContent() {
+  const { width: viewportWidth } = useWindowDimensions();
+  const screenWidth = Math.min(viewportWidth, 440);
+  const balanceSize = Math.min(48, (screenWidth - 64) * 0.146);
   const [auth, setAuth] = useState<AuthScreen>("welcome");
   const [tab, setTab] = useState<Tab>("wallet");
   const [signupStep, setSignupStep] = useState(0);
@@ -185,22 +218,25 @@ function AppContent() {
 
   if (auth === "welcome") {
     return (
-      <LinearGradient colors={["#fff0a0", "#ffd34a", "#f39a2d", "#d75c1d"]} style={styles.welcome}>
+      <LinearGradient colors={["#FFEEAF", "#FFDF4B", "#F2AD3C", "#D36221"]} locations={[0, 0.24, 0.48, 1]} style={styles.flex}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.welcome} showsVerticalScrollIndicator={false}>
         <View style={styles.brand}>
-          <View style={styles.brandMark}><Text style={styles.brandSymbol}>♞</Text></View>
+          <View style={styles.brandMark}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia logo" style={styles.brandLogo} /></View>
           <Text style={styles.brandName}>Aurelia</Text>
-          <Text style={styles.tagline}>Believe in the Golden Rule,{"\n"}Gold always Rules.</Text>
-          <View style={styles.goldDash} />
+          <Text style={styles.tagline}>Believe in the Golden Rule, Gold{"\n"}always Rules.</Text>
+          <View style={[styles.goldDash, styles.welcomeDash]} />
         </View>
         <View style={styles.welcomeActions}>
           <Pressable onPress={() => setAuth("login")} style={styles.faceButton}>
-            <Text style={styles.faceButtonIcon}>⌗</Text>
+            <ScanFace size={30} color="#fff" strokeWidth={1.8} />
           </Pressable>
           <Text style={styles.scanCaption}>Scan my face</Text>
-          <ActionButton onPress={() => setAuth("login")}>Login</ActionButton>
+          <ActionButton white onPress={() => setAuth("login")}>Login</ActionButton>
           <View style={styles.orRow}><View style={styles.rule} /><Text style={styles.orText}>OR</Text><View style={styles.rule} /></View>
           <ActionButton onPress={startSignup} secondary>Sign up</ActionButton>
         </View>
+        </ScrollView>
       </LinearGradient>
     );
   }
@@ -221,7 +257,7 @@ function AppContent() {
             <View style={styles.orRow}><View style={styles.rule} /><Text style={styles.orText}>OR</Text><View style={styles.rule} /></View>
             <ActionButton onPress={startSignup} secondary>Sign up</ActionButton>
             <Pressable onPress={enterWallet} style={styles.scanLogin}>
-              <View style={styles.scanTile}><Text style={styles.scanButtonIcon}>⌗</Text></View>
+              <View style={styles.scanTile}><ScanFace size={30} color="#fff" strokeWidth={1.8} /></View>
               <Text style={styles.body}>Scan my face</Text>
             </Pressable>
           </ScrollView>
@@ -255,25 +291,27 @@ function AppContent() {
           </>}
           {signupStep === 1 && <>
             <Text style={styles.display}>Scan your face</Text><View style={styles.goldDash} />
-            <View style={styles.facePreview}><Text style={styles.faceEmoji}>👩🏻</Text></View>
+            <View style={styles.facePreview}><View style={styles.facePreviewInner}><ScanFace size={112} color={WHITE[64]} strokeWidth={1} /></View></View>
             <View style={styles.instructions}>
               {["Look straight into the camera", "Remove glasses, hats, or masks", "Find good lighting"].map((item) => (
-                <Text style={styles.instruction} key={item}><Text style={styles.goldText}>✓</Text>  {item}</Text>
+                <View style={styles.instructionRow} key={item}><Check size={16} color={GOLD} strokeWidth={1.6} /><Text style={styles.instruction}>{item}</Text></View>
               ))}
             </View>
+            <View style={styles.formSpacer} />
             <ActionButton onPress={() => setSignupStep(2)}>Next</ActionButton>
           </>}
           {signupStep === 2 && <>
             <Text style={styles.display}>Verify your phone number</Text><View style={styles.goldDash} />
-            <View style={styles.phoneTile}><Text style={styles.phoneIcon}>▣</Text></View>
+            <View style={styles.phoneTile}><Smartphone size={58} color={WHITE[64]} strokeWidth={2.5} /></View>
             <View style={styles.otpRow}>{["5", "4", "2", "0", "0", "6"].map((digit, index) => <Text style={styles.otpDigit} key={`${digit}-${index}`}>{digit}</Text>)}</View>
+            <View style={styles.formSpacer} />
             <ActionButton onPress={() => setSignupStep(3)}>Next</ActionButton>
           </>}
           {signupStep === 3 && <View style={styles.successContent}>
-            <View style={styles.successIcon}><Text style={styles.successCheck}>✓</Text></View>
+            <View style={styles.successIcon}><Check size={38} color={GOLD} strokeWidth={1.8} /></View>
             <Text style={[styles.display, styles.centerText]}>Your account is set!</Text>
             <Text style={[styles.mutedBody, styles.centerText]}>After a few simple steps, your wallet account is ready to go. Add funds and start using Aurelia.</Text>
-            <ActionButton onPress={enterWallet} compact>✓  Got it</ActionButton>
+            <ActionButton onPress={enterWallet} compact icon={Check}>Got it</ActionButton>
           </View>}
         </ScrollView>
       </SafeAreaView>
@@ -290,37 +328,37 @@ function AppContent() {
         <View style={styles.sendPanel}>
           <ScrollView style={styles.sendScroll} contentContainerStyle={styles.sendContent} keyboardShouldPersistTaps="handled">
             {sendStep === 0 && <>
-              <Field label="You send" value="$ 1,000" />
+              <Field boxed currency="USD" label="You send" value="$ 1,000" />
               <Surface style={styles.feeCard}>
                 <View style={styles.feeRow}><Label>Conversion Fee</Label><Label>$5.00</Label></View>
                 <View style={styles.feeRow}><Label>Transfer Fee</Label><Label>2.5%</Label></View>
                 <View style={styles.divider} />
                 <View style={styles.feeRow}><Label>Amount to transfer</Label><Label>$978.23</Label></View>
               </Surface>
-              <Field label="Recipient gets" value="€ 982.73" />
-              <Text style={styles.mutedBody}>ⓘ  Transfer will take 5 hours</Text>
+              <Field boxed currency="EUR" label="Recipient gets" value="€ 982.73" />
+              <View style={styles.inlineInfo}><Info size={14} color={MUTED} /><Text style={styles.label}>Transfer will take 5 hours</Text></View>
             </>}
             {sendStep === 1 && <>
-              <TextInput value={search} onChangeText={setSearch} placeholder="⌕  Search recipients" placeholderTextColor={MUTED} style={styles.searchBox} />
+              <View style={styles.searchContainer}><Search size={17} color={MUTED} /><TextInput value={search} onChangeText={setSearch} placeholder="Search recipients" placeholderTextColor={MUTED} style={styles.searchBox} /></View>
               <Surface style={styles.recipientList}>
                 {recipients.filter(([name]) => name.toLowerCase().includes(search.toLowerCase())).map(([name, number, avatar], index) => (
                   <Pressable key={name} onPress={() => setSelectedPerson(index)} style={[styles.recipientRow, selectedPerson === index && styles.selectedRow]}>
                     <Text style={styles.avatar}>{avatar}</Text>
                     <View style={styles.personCopy}><Text style={styles.personName}>{name}</Text><Text style={styles.subtle}>{number}</Text></View>
-                    <View style={[styles.radio, selectedPerson === index && styles.radioSelected]}>{selectedPerson === index && <Text style={styles.radioCheck}>✓</Text>}</View>
+                    <View style={[styles.radio, selectedPerson === index && styles.radioSelected]}>{selectedPerson === index && <Check size={14} color="#111" strokeWidth={1.7} />}</View>
                   </Pressable>
                 ))}
               </Surface>
             </>}
             {sendStep === 2 && <>
-              <Field label="Total sending" value="$ 1,000" />
+              <Field boxed label="Total sending" value="$ 1,000" />
               <Label style={styles.sectionLabel}>Select card</Label>
               <Surface style={styles.recipientList}>
                 {["$23,480.52", "$7,430.52", "$7,480.52"].map((balance, index) => (
                   <Pressable key={balance} onPress={() => setSelectedCard(index)} style={[styles.paymentRow, selectedCard === index && styles.selectedRow]}>
-                    <LinearGradient colors={index === 0 ? ["#55dfbd", "#3385d5"] : index === 1 ? ["#b953e8", "#f04a75"] : ["#ffd365", "#ef721f"]} style={styles.miniCard}><Text>▣</Text></LinearGradient>
+                    <LinearGradient colors={index === 0 ? ["#55dfbd", "#3385d5"] : index === 1 ? ["#b953e8", "#f04a75"] : ["#ffd365", "#ef721f"]} style={styles.miniCard}><CreditCard size={22} color="#fff" strokeWidth={1.8} /></LinearGradient>
                     <View style={styles.personCopy}><Text style={styles.amountText}>{balance}</Text><Text style={styles.subtle}>••••  ••••  ••••  3465</Text></View>
-                    <View style={[styles.radio, selectedCard === index && styles.radioSelected]}>{selectedCard === index && <Text style={styles.radioCheck}>✓</Text>}</View>
+                    <View style={[styles.radio, selectedCard === index && styles.radioSelected]}>{selectedCard === index && <Check size={14} color="#111" strokeWidth={1.7} />}</View>
                   </Pressable>
                 ))}
               </Surface>
@@ -328,7 +366,7 @@ function AppContent() {
             {sendStep === 3 && <>
               <Label style={styles.summaryLabel}>Amount</Label><Text style={styles.summaryAmount}>€ 982.73</Text>
               <Label style={styles.summaryLabel}>Recipient</Label><View style={styles.summaryPerson}><Text style={styles.avatar}>👩🏻‍🎤</Text><View><Text style={styles.personName}>{recipients[selectedPerson]?.[0] ?? "James Parker"}</Text><Text style={styles.subtle}>recipient@email.com</Text></View></View>
-              <Label style={styles.summaryLabel}>Card selected</Label><View style={styles.summaryPerson}><Text style={styles.avatar}>💳</Text><View><Text style={styles.personName}>Junior Card</Text><Text style={styles.subtle}>1204  ****  ****  3756</Text></View></View>
+              <Label style={styles.summaryLabel}>Card selected</Label><View style={styles.summaryPerson}><LinearGradient colors={["#731ADF", "#34116A"]} style={styles.miniCard}><CreditCard size={28} color="#fff" /></LinearGradient><View><Text style={styles.personName}>Junior Card</Text><Text style={styles.subtle}>1204  ****  ****  3756</Text></View></View>
               <Surface style={styles.feeCard}>
                 <View style={styles.feeRow}><Label>Conversion Fee</Label><Label>$5.00</Label></View>
                 <View style={styles.feeRow}><Label>Transfer Fee</Label><Label>2.5%</Label></View>
@@ -337,13 +375,13 @@ function AppContent() {
               <View style={styles.totalRow}><Text style={styles.totalText}>Total</Text><Text style={styles.totalText}>€ 982.73</Text></View>
             </>}
             {sendStep === 4 && <View style={styles.successContent}>
-              <View style={styles.successIcon}><Text style={styles.successCheck}>✓</Text></View>
+              <View style={styles.successIcon}><Check size={38} color={GOLD} strokeWidth={1.8} /></View>
               <Text style={[styles.display, styles.centerText]}>Successful operation!</Text>
               <Text style={[styles.mutedBody, styles.centerText]}>Your transfer is on its way. You can follow its progress in your activity.</Text>
+              <ActionButton onPress={() => setSendStep(null)} compact icon={Check}>Got it</ActionButton>
             </View>}
           </ScrollView>
           {sendStep < 4 && <ActionButton onPress={nextSend}>{sendStep === 3 ? "Pay" : "Pay"}</ActionButton>}
-          {sendStep === 4 && <ActionButton onPress={() => setSendStep(null)} compact>✓  Got it</ActionButton>}
         </View>
       </SafeAreaView>
     );
@@ -364,83 +402,87 @@ function AppContent() {
       <Header
         title={tabTitle[tab]}
         onBack={tab === "ai" ? () => setTab("wallet") : undefined}
-        right={tab === "ai" ? null : <Pressable onPress={goToAI}><Text style={styles.headerIcon}>↗</Text></Pressable>}
+        right={tab === "ai" ? null : <Pressable accessibilityLabel="Open AI chat" onPress={goToAI}><TrendingUp size={23} color="#fff" strokeWidth={1.8} /><View style={styles.notificationDot} /></Pressable>}
       />
       {tab === "wallet" && <ScrollView contentContainerStyle={styles.dashboard} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={["#292929", "#232323"]} style={styles.balanceCard}>
-          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Balance</Text><Text style={styles.subtle}>Today, 21 Feb</Text></View><Pressable onPress={() => setSendStep(0)} style={styles.addButton}><Text style={styles.goldText}>＋ Add</Text></Pressable></View>
-          <Text style={styles.balanceAmount}>$238,219<Text style={styles.balanceCents}>.32</Text></Text>
+          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Balance</Text><Text style={styles.subtle}>Today, 21 Feb</Text></View><Pressable onPress={() => setSendStep(0)} style={styles.addButton}><Plus size={14} color={GOLD} /><Text style={styles.goldText}>Add</Text></Pressable></View>
+          <Text style={[styles.balanceAmount, { fontSize: balanceSize }]}>$238,219<Text style={styles.balanceCents}>.32</Text></Text>
           <View style={styles.quickActions}>
-            {[["↑", "Send"], ["↓", "Receive"], ["⌗", "Scan"], ["↔", "Convert"]].map(([icon, label]) => (
+            {([[ArrowUp, "Send"], [ArrowDown, "Receive"], [ScanLine, "Scan"], [ArrowLeftRight, "Convert"]] as const).map(([Icon, label]) => (
               <Pressable key={label} onPress={label === "Send" ? () => setSendStep(0) : () => setTab("cards")} style={styles.quickAction}>
-                <View style={styles.quickIcon}><Text style={styles.goldText}>{icon}</Text></View><Text style={styles.body}>{label}</Text>
+                <View style={styles.quickIcon}><Icon size={24} color={GOLD} strokeWidth={1.8} /></View><Text style={styles.body}>{label}</Text>
               </Pressable>
             ))}
           </View>
         </LinearGradient>
         <Surface style={styles.expensesCard}>
-          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Expenses</Text><Text style={styles.subtle}>This week, 14 – 21 Feb</Text></View><Text style={styles.period}>▢  This week</Text></View>
+          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Expenses</Text><Text style={styles.subtle}>This week, 14 – 21 Feb</Text></View><View style={styles.period}><CalendarDays size={16} color="#fff" /><Text style={styles.periodText}>This week</Text></View></View>
           <View style={styles.expenseChart}>
-            <View style={styles.statColumn}><View style={styles.stat}><View style={[styles.legendDot, { backgroundColor: "#ffa622" }]} /><Text style={styles.statNumber}>21%</Text><Text style={styles.subtle}>Bills &amp; Debt</Text></View><View style={styles.stat}><View style={[styles.legendDot, { backgroundColor: "#f3e65a" }]} /><Text style={styles.statNumber}>21%</Text><Text style={styles.subtle}>Bills &amp; Debt</Text></View></View>
-            <View style={styles.donut}><View style={styles.donutInner}><Text style={styles.subtle}>Expenses</Text><Text style={styles.donutAmount}>$10,262</Text></View></View>
-            <View style={styles.statColumn}><View style={styles.stat}><View style={[styles.legendDot, { backgroundColor: "#c56317" }]} /><Text style={styles.statNumber}>21%</Text><Text style={styles.subtle}>Bills &amp; Debt</Text></View><View style={styles.stat}><View style={[styles.legendDot, { backgroundColor: "#b83e16" }]} /><Text style={styles.statNumber}>21%</Text><Text style={styles.subtle}>Shopping</Text></View></View>
+            <View style={styles.statColumn}>{[EXPENSES[0], EXPENSES[3]].map((item) => <View key={item.label} style={styles.stat}><View style={[styles.legendDot, { backgroundColor: item.color }]} /><Text style={styles.statNumber}>{item.value}%</Text><Text style={styles.chartCaption}>{item.label}</Text></View>)}</View>
+            <ExpenseDonut />
+            <View style={styles.statColumn}>{[EXPENSES[1], EXPENSES[2]].map((item) => <View key={item.label} style={styles.stat}><View style={[styles.legendDot, { backgroundColor: item.color }]} /><Text style={styles.statNumber}>{item.value}%</Text><Text style={styles.chartCaption}>{item.label}</Text></View>)}</View>
           </View>
         </Surface>
         <Surface>
-          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Activity</Text><Text style={styles.subtle}>This week, 14 – 21 Feb</Text></View><Text style={styles.period}>▢  This month</Text></View>
-          <View style={styles.chart}><Text style={styles.chartLine}>$25k{"\n"}$10k{"\n"}$5k{"\n"}$1k</Text><View style={styles.chartFill}><Text style={styles.chartSpark}>⌁</Text></View></View>
-          <View style={styles.legendRow}><Text style={styles.body}>Earnings{"\n"}<Text style={styles.green}>+23% ↗</Text></Text><Text style={styles.body}>Expenses{"\n"}<Text style={styles.red}>+23% ↙</Text></Text></View>
+          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Activity</Text><Text style={styles.subtle}>This week, 14 – 21 Feb</Text></View><View style={styles.period}><CalendarDays size={16} color="#fff" /><Text style={styles.periodText}>This month</Text></View></View>
+          <TrendChart activity />
+          <View style={styles.legendRow}>
+            <View style={styles.activityStat}><View><Text style={styles.body}>Earnings</Text><Text style={styles.statNumber}>+23%</Text></View><ArrowUpRight size={25} color="#43E433" strokeWidth={1.5} /></View>
+            <View style={[styles.activityStat, styles.activityStatDivider]}><View><Text style={styles.body}>Expenses</Text><Text style={styles.statNumber}>+23%</Text></View><ArrowDownLeft size={25} color="#FF453A" strokeWidth={1.5} /></View>
+          </View>
         </Surface>
         <Surface>
-          <View style={styles.rowBetween}><Text style={styles.cardTitle}>My accounts</Text><Pressable onPress={() => setTab("cards")} style={styles.addButton}><Text style={styles.goldText}>＋ Add</Text></Pressable></View>
+          <View style={styles.rowBetween}><Text style={styles.cardTitle}>My accounts</Text><Pressable onPress={() => setTab("cards")} style={styles.addButton}><Plus size={14} color={GOLD} /><Text style={styles.goldText}>Add</Text></Pressable></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accountScroll}>
-            {["PayPal Account", "PayPal Account", "Savings"].map((name, index) => <Pressable key={`${name}-${index}`} onPress={() => setTab("cards")} style={styles.accountCard}><Text style={styles.bankMark}>♙</Text><Text style={styles.subtle}>{name}</Text><Text style={styles.accountAmount}>$12,724</Text></Pressable>)}
+            {["PayPal Account", "PayPal Account", "Savings"].map((name, index) => <Pressable key={`${name}-${index}`} onPress={() => setTab("cards")} style={styles.accountCard}><View style={styles.accountTop}><View style={styles.bankMark}><Landmark size={20} color={GOLD} strokeWidth={1.8} /></View><MoreVertical size={17} color={WHITE[48]} /></View><Text style={styles.subtle}>{name}</Text><Text style={styles.accountAmount}>$12,724</Text></Pressable>)}
           </ScrollView>
         </Surface>
-        <Pressable onPress={goToAI} style={styles.aiTeaser}><View style={styles.aiOrbSmall}><Text style={styles.orbHorse}>♞</Text></View><View style={styles.personCopy}><Text style={styles.body}>Your money, made clearer</Text><Text style={styles.subtle}>Ask Aurelia AI for a personal insight</Text></View><Text style={styles.subtle}>‹</Text></Pressable>
+        <Pressable onPress={goToAI} style={styles.aiTeaser}><View style={styles.aiOrbSmall}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia AI" style={styles.orbLogo} /></View><View style={styles.personCopy}><Text style={styles.body}>Your money, made clearer</Text><Text style={styles.subtle}>Ask Aurelia AI for a personal insight</Text></View><ChevronRight size={18} color={MUTED} /></Pressable>
       </ScrollView>}
       {tab === "cards" && <ScrollView contentContainerStyle={styles.tabContent}>
         <View style={styles.cardCarousel}>
           <Pressable onPress={() => setCardIndex((cardIndex + 3) % 4)} style={[styles.sideCard, styles.sideCardLeft]} />
-          <LinearGradient colors={["#5016bd", "#7129e2", "#388bf4"]} style={styles.visualCard}>
-            <View style={styles.rowBetween}><Text style={styles.cardName}>Junior Card</Text><Text style={styles.mastercard}>🔴🟠</Text></View>
-            <View style={styles.cardChip}><Text>▦</Text></View>
-            <Text style={styles.cardNumber}>1204  3756  3984  3756</Text>
+          <LinearGradient colors={["#26152C", "#5C14D4", "#762CF0", "#78A6FF", "#FFEFF8"]} locations={[0, 0.4, 0.65, 0.82, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.visualCard}>
+            <View style={styles.rowBetween}><Text style={styles.cardName}>Junior Card</Text><View style={styles.mastercard}><View style={styles.mastercardRed} /><View style={styles.mastercardOrange} /></View></View>
+            <View style={styles.cardChip}><View style={styles.chipHorizontal} /><View style={styles.chipVertical} /></View>
+            <Text style={[styles.cardNumber, { fontSize: Math.min(20, (screenWidth - 90) * 0.066) }]}>1204  3756  3984  3756</Text>
             <View style={styles.rowBetween}><Text style={styles.cardOwner}>Aurelia Kaizer</Text><Text style={styles.cardOwner}>14/28</Text></View>
           </LinearGradient>
           <Pressable onPress={() => setCardIndex((cardIndex + 1) % 4)} style={[styles.sideCard, styles.sideCardRight]} />
         </View>
-        <Text style={styles.dots}>●  ○  ○  ○</Text>
-        <Text style={styles.sectionCaption}>Card amount</Text><Text style={styles.cardBalance}>$31,204<Text style={styles.balanceCents}>.94</Text></Text>
+        <View style={styles.pagination}>{[0, 1, 2, 3].map((index) => <View key={index} style={[styles.paginationDot, index === cardIndex && styles.paginationActive]} />)}</View>
+        <Text style={styles.sectionCaption}>Card amount</Text><Text style={[styles.cardBalance, { fontSize: balanceSize }]}>$31,204<Text style={styles.balanceCents}>.94</Text></Text>
         <Text style={[styles.sectionCaption, styles.transactionHeader]}>Latest transactions</Text>
-        {["Electricity", "Electricity", "Electricity"].map((name, index) => <View style={styles.transaction} key={`${name}-${index}`}><View style={styles.transactionIcon}><Text style={styles.green}>↑</Text></View><View style={styles.personCopy}><Text style={styles.body}>{name}</Text><Text style={styles.subtle}>9:53 AM</Text></View><Text style={styles.body}>+4.000</Text></View>)}
-        <ActionButton onPress={() => setTab("menu")}>＋  Add new card</ActionButton>
+        {["Electricity", "Electricity", "Electricity"].map((name, index) => <View style={styles.transaction} key={`${name}-${index}`}><View style={styles.transactionIcon}><ArrowUp size={24} color="#50B754" strokeWidth={1.6} /></View><View style={styles.personCopy}><Text style={styles.body}>{name}</Text><Text style={styles.subtle}>9:53 AM</Text></View><Text style={styles.body}>+4.000</Text></View>)}
+        <ActionButton icon={Plus} onPress={() => setTab("menu")}>Add new card</ActionButton>
       </ScrollView>}
       {tab === "recipients" && <ScrollView contentContainerStyle={styles.tabContent}>
-        {["Asher Allen", "Amelia Archer", "Aaron Adams", "Ava Anderson", "Brandon Cole", ...recipients.map(([name]) => name)].map((name, index) => <View key={`${name}-${index}`} style={styles.transaction}><Text style={styles.avatar}>{recipients[index % recipients.length][2]}</Text><Text style={[styles.body, styles.personCopy]}>{name}</Text><Pressable><Text style={styles.moreButton}>⋮</Text></Pressable></View>)}
-        <ActionButton onPress={() => setSendStep(0)}>＋  Add recipient</ActionButton>
+        {["Asher Allen", "Amelia Archer", "Aaron Adams", "Ava Anderson", "Brandon Cole", ...recipients.map(([name]) => name)].map((name, index) => <View key={`${name}-${index}`} style={styles.transaction}><Text style={styles.avatar}>{recipients[index % recipients.length][2]}</Text><Text style={[styles.body, styles.personCopy]}>{name}</Text><Pressable accessibilityLabel={`More options for ${name}`} style={styles.moreButton}><MoreVertical size={18} color={MUTED} /></Pressable></View>)}
+        <ActionButton icon={Plus} onPress={() => setSendStep(0)}>Add recipient</ActionButton>
       </ScrollView>}
       {tab === "menu" && <ScrollView contentContainerStyle={styles.tabContent}>
-        <View style={styles.profileRow}><Text style={styles.avatar}>👩🏼‍💼</Text><View style={styles.personCopy}><Text style={styles.cardTitle}>Aurelia Kaiser</Text><Text style={styles.subtle}>View profile</Text></View><Text style={styles.period}>✎ Edit</Text></View>
-        {["Subscriptions", "Recipients", "Payments", "Utilities", "Shopping list", "Support", "FAQs", "Logout"].map((item, index) => <Pressable key={item} style={styles.menuItem} onPress={() => item === "Logout" ? setAuth("welcome") : item === "Recipients" ? setTab("recipients") : item === "Payments" ? setSendStep(0) : setTab("cards")}><Text style={styles.menuGlyph}>{["▣", "♟", "▧", "⌘", "♧", "◉", "ⓘ", "↪"][index]}</Text><Text style={styles.body}>{item}</Text>{index === 0 || index === 4 ? <Text style={styles.menuCount}>{index === 0 ? "2" : "15"}</Text> : null}</Pressable>)}
+        <View style={styles.profileRow}><Text style={styles.avatar}>👩🏼‍💼</Text><View style={styles.personCopy}><Text style={styles.cardTitle}>Aurelia Kaiser</Text><Text style={styles.subtle}>View profile</Text></View><View style={styles.period}><Pencil size={15} color="#fff" /><Text style={styles.periodText}>Edit</Text></View></View>
+        {["Subscriptions", "Recipients", "Payments", "Utilities", "Shopping list", "Support", "FAQs", "Logout"].map((item, index) => <Pressable key={item} style={styles.menuItem} onPress={() => item === "Logout" ? setAuth("welcome") : item === "Recipients" ? setTab("recipients") : item === "Payments" ? setSendStep(0) : setTab("cards")}><MenuIcon index={index} /><View style={styles.menuItemCopy}><Text style={styles.body}>{item}</Text>{index === 0 || index === 4 ? <Text style={styles.menuCount}>{index === 0 ? "2" : "15"}</Text> : null}</View></Pressable>)}
       </ScrollView>}
       {tab === "ai" && <KeyboardAvoidingView style={styles.aiScreen} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={12}>
         <ScrollView contentContainerStyle={styles.aiContent} keyboardShouldPersistTaps="handled">
           {messages.length === 0 ? <>
-            <View style={styles.aiGreeting}><View style={styles.aiOrb}><Text style={styles.orbHorse}>♞</Text></View><Text style={[styles.display, styles.centerText]}>Hi, how can I help you today?</Text></View>
-            {suggestions.map((item) => <Pressable key={item} onPress={() => sendMessage(item)} style={styles.suggestion}><Text style={[styles.body, styles.personCopy]}>{item}</Text><Text style={styles.subtle}>›</Text></Pressable>)}
-          </> : messages.map((message, index) => <View key={`${message}-${index}`} style={styles.messageGroup}><Text style={styles.userMessage}>{message}</Text><Text style={[styles.body, styles.response]}>Here is a helpful overview based on your recent activity. Your spending is on track, and your balance is looking healthy.</Text><Surface><Text style={styles.cardTitle}>My spending trends</Text><View style={styles.chart}><View style={styles.chartFill}><Text style={styles.chartSpark}>⌁</Text></View></View><Text style={styles.subtle}>Your spending has stayed consistent over the past few months.</Text></Surface><Text style={styles.subtle}>Are you satisfied with this answer?　✓ Yes　× No</Text></View>)}
+            <View style={styles.aiGreeting}><View style={styles.aiOrb}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia AI" style={styles.orbLogo} /></View><Text style={[styles.display, styles.centerText]}>Hi, how can I help you today?</Text></View>
+            {suggestions.map((item, index) => <Pressable key={item} onPress={() => sendMessage(item)} style={styles.suggestion}><SuggestionIcon index={index} /><Text style={[styles.body, styles.personCopy]}>{item}</Text><ChevronRight size={18} color={WHITE[48]} /></Pressable>)}
+          </> : messages.map((message, index) => <View key={`${message}-${index}`} style={styles.messageGroup}><Text style={styles.userMessage}>{message}</Text><Text style={[styles.body, styles.response]}>Here is a helpful overview based on your recent activity. Your spending is on track, and your balance is looking healthy.</Text><Surface><Text style={styles.cardTitle}>My spending trends</Text><TrendChart /><Text style={styles.subtle}>Your spending has stayed consistent over the past few months.</Text></Surface><View style={styles.feedback}><Text style={styles.body}>Are you satisfied with this answer?</Text><View style={styles.feedbackOptions}><View style={styles.feedbackOption}><Check size={16} color={MUTED} /><Text style={styles.body}>Yes</Text></View><View style={[styles.feedbackOption, styles.feedbackNo]}><X size={16} color={MUTED} /><Text style={styles.body}>No</Text></View></View></View></View>)}
         </ScrollView>
         <View style={styles.chatInput}>
-          <Pressable style={styles.micButton}><Text style={styles.subtle}>♩</Text></Pressable>
+          <Pressable style={styles.micButton}><Mic size={18} color={MUTED} strokeWidth={1.7} /></Pressable>
           <TextInput value={prompt} onChangeText={setPrompt} onSubmitEditing={() => sendMessage()} placeholder="Ask anything" placeholderTextColor={MUTED} style={styles.chatTextInput} returnKeyType="send" />
-          <Pressable onPress={() => sendMessage()} style={styles.sendChat}><Text style={styles.sendChatText}>↑</Text></Pressable>
+          <Pressable accessibilityLabel="Send message" onPress={() => sendMessage()}><LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.sendChat}><ArrowUp size={23} color="#111" strokeWidth={1.7} /></LinearGradient></Pressable>
         </View>
       </KeyboardAvoidingView>}
       {tab !== "ai" && <View style={styles.bottomNav}>
-        {([["wallet", "▣", "Wallet"], ["recipients", "↔", "Transfers"], ["send", "＋", "Send"], ["cards", "▤", "Cards"], ["menu", "☰", "Menu"]] as const).map(([destination, icon, label]) => (
+        {([["wallet", Wallet, "Wallet"], ["recipients", ArrowLeftRight, "Transfers"], ["send", Plus, "Send"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
           <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} onPress={() => destination === "send" ? setSendStep(0) : setTab(destination)} style={styles.navButton}>
-            {destination === "send" ? <LinearGradient colors={["#ffe77a", "#ffb52e", "#e87418"]} style={styles.navSend}><Text style={styles.navSendText}>{icon}</Text></LinearGradient> : <Text style={[styles.navIcon, tab === destination && styles.goldText]}>{icon}</Text>}
+            {tab === destination && <View style={styles.navIndicator} />}
+            {destination === "send" ? <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.navSend}><Icon size={25} color="#111" strokeWidth={1.8} /></LinearGradient> : <Icon size={27} color={tab === destination ? GOLD : WHITE[48]} strokeWidth={2} />}
           </Pressable>
         ))}
       </View>}
@@ -449,182 +491,203 @@ function AppContent() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    InstrumentSerif: require("./assets/fonts/InstrumentSerif-Regular.ttf"),
+  });
+
+  if (fontError) throw fontError;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: "#191919" }} />;
+
   return (
     <SafeAreaProvider>
-      <AppContent />
+      <View style={styles.canvas}>
+        <LinearGradient colors={DARK_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.appFrame}>
+          <AppContent />
+        </LinearGradient>
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  formSpacer: { flex: 1, minHeight: 12 },
+  menuItemCopy: { flex: 1, minHeight: 64, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: WHITE[24] },
+  inputRow: { flexDirection: "row", alignItems: "center" },
+  boxedField: { borderBottomWidth: 0, paddingHorizontal: 0, paddingBottom: 0, marginBottom: 24 },
+  boxedInput: { minHeight: 62, paddingHorizontal: 15, marginTop: 5, borderRadius: 16, borderWidth: 1.5, borderColor: WHITE[24], backgroundColor: SURFACE, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 7, shadowOffset: { width: 0, height: 5 } },
+  amountInput: { flex: 1, fontSize: 24, minHeight: 36 },
+  currencyLabel: { color: "#fff", fontSize: 14, marginLeft: 12 },
+  searchContainer: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 16, borderWidth: 1, borderColor: WHITE[12], borderTopLeftRadius: 16, borderTopRightRadius: 16, backgroundColor: SURFACE },
+  instructionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  facePreviewInner: { width: "90%", aspectRatio: 1, borderRadius: 125, backgroundColor: "#2B2B2B", alignItems: "center", justifyContent: "center" },
+  pagination: { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 28, marginTop: 8 },
+  paginationDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: WHITE[64] },
+  paginationActive: { backgroundColor: WHITE[64] },
+  canvas: { flex: 1, backgroundColor: "#090909", alignItems: "center" },
+  appFrame: { flex: 1, width: "100%", maxWidth: 440, overflow: "hidden" },
+  whiteButton: { backgroundColor: "#fff" },
+  welcomeDash: { width: 31, height: 5, backgroundColor: WHITE[48], marginBottom: 0, marginTop: 18 },
+  inlineInfo: { flexDirection: "row", gap: 8, alignItems: "center", marginVertical: 2 },
+  notificationDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GOLD, alignSelf: "center", marginTop: 6 },
+  periodText: { color: "#fff", fontSize: 13 },
+  chartCaption: { color: WHITE[64], fontSize: 11, lineHeight: 16, marginTop: 3, textAlign: "center" },
+  activityStat: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 16 },
+  activityStatDivider: { borderLeftWidth: 1, borderColor: WHITE[12], paddingLeft: 16, paddingRight: 0 },
+  accountTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
+  navIndicator: { position: "absolute", top: -18, height: 2, width: 40, backgroundColor: GOLD },
+  mastercardRed: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#EB001B" },
+  mastercardOrange: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#FFAA00", opacity: 0.92, marginLeft: -9 },
+  chipHorizontal: { position: "absolute", width: "100%", height: 11, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: "#8D753D" },
+  chipVertical: { width: 14, height: "100%", borderLeftWidth: 0.5, borderRightWidth: 0.5, borderColor: "#8D753D", borderRadius: 4 },
+  feedback: { gap: 16, marginBottom: 16 },
+  feedbackOptions: { alignSelf: "flex-start", flexDirection: "row", borderRadius: 20, borderWidth: 1, borderColor: WHITE[24], overflow: "hidden" },
+  feedbackOption: { flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, paddingVertical: 8 },
+  feedbackNo: { borderLeftWidth: 1, borderColor: WHITE[24] },
   flex: { flex: 1 },
-  app: { flex: 1, backgroundColor: "#111" },
-  welcome: { flex: 1, justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 68, paddingBottom: 36 },
-  brand: { alignItems: "center", paddingTop: 36 },
-  brandMark: { width: 116, height: 116, borderRadius: 58, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", elevation: 12 },
-  brandSymbol: { color: "#ed9223", fontSize: 62 },
-  brandName: { color: "#fff", fontFamily: "Georgia", fontSize: 50, marginTop: 16 },
-  tagline: { color: "#fff", fontFamily: "Georgia", fontSize: 21, lineHeight: 31, textAlign: "center", marginTop: 8 },
-  goldDash: { width: 24, height: 3, backgroundColor: GOLD, marginTop: 15, marginBottom: 32 },
-  welcomeActions: { alignItems: "center", gap: 10 },
-  faceButton: { width: 64, height: 64, borderRadius: 20, borderWidth: 1, borderColor: "#ffffffaa", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff10" },
-  faceButtonIcon: { fontSize: 32, color: "#fff" },
-  scanCaption: { color: "#fff", fontSize: 14 },
-  actionButton: { minHeight: 44, width: "100%", backgroundColor: GOLD, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
-  actionText: { color: "#17120b", fontSize: 15, fontWeight: "600" },
-  secondaryButton: { borderWidth: 1, borderColor: "#777", backgroundColor: "transparent" },
+  app: { flex: 1, backgroundColor: "transparent" },
+  welcome: { flexGrow: 1, justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 68, paddingBottom: 54 },
+  brand: { alignItems: "center", paddingTop: 40 },
+  brandMark: { width: 118, height: 118, borderRadius: 59, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", shadowColor: "#7E4D17", shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 14 }, elevation: 12 },
+  brandLogo: { width: 80, height: 80 },
+  brandName: { color: "#fff", fontFamily: "InstrumentSerif", fontSize: 56, lineHeight: 66, marginTop: 18, textShadowColor: "#75471F66", textShadowRadius: 2, textShadowOffset: { width: 0, height: 2 } },
+  tagline: { color: "#fff", fontFamily: "InstrumentSerif", fontSize: 28, lineHeight: 38, textAlign: "center", marginTop: 4, textShadowColor: "#75471F66", textShadowRadius: 2, textShadowOffset: { width: 0, height: 2 } },
+  goldDash: { width: 24, height: 4, backgroundColor: GOLD, marginTop: 18, marginBottom: 38 },
+  welcomeActions: { alignItems: "center", gap: 12 },
+  faceButton: { width: 64, height: 64, borderRadius: 21, borderWidth: 2, borderColor: WHITE[64], alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  scanCaption: { color: "#fff", fontSize: 15, marginBottom: 28 },
+  actionButton: { minHeight: 40, width: "100%", backgroundColor: GOLD, borderRadius: 12, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  actionText: { color: "#111", fontSize: 15, fontWeight: "500" },
+  secondaryButton: { borderWidth: 1.5, borderColor: WHITE[48], backgroundColor: "transparent", shadowOpacity: 0, elevation: 0 },
   secondaryText: { color: "#fff" },
   compactButton: { width: "auto", alignSelf: "center", minWidth: 96 },
   pressed: { opacity: 0.78 },
-  orRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12, marginVertical: 7 },
-  rule: { flex: 1, height: 1, backgroundColor: "#686868" },
-  orText: { color: MUTED, fontSize: 12 },
-  header: { minHeight: 60, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  orRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12, paddingHorizontal: 8, marginVertical: 22 },
+  rule: { flex: 1, height: 1, backgroundColor: WHITE[24] },
+  orText: { color: WHITE[48], fontSize: 11 },
+  header: { minHeight: 64, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerSide: { width: 42, height: 40, justifyContent: "center" },
   headerRight: { alignItems: "flex-end" },
-  headerIcon: { color: "#fff", fontSize: 29, lineHeight: 34 },
-  headerTitle: { color: "#fff", fontSize: 15, fontWeight: "500" },
-  authContent: { paddingHorizontal: 16, paddingTop: 22, paddingBottom: 34 },
-  display: { color: "#f7f5f1", fontFamily: "Georgia", fontSize: 30, lineHeight: 39 },
-  field: { minWidth: 0, marginBottom: 23, paddingHorizontal: 4, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: "#686868" },
-  fieldLabel: { color: MUTED, fontSize: 13, marginBottom: 3 },
-  fieldInput: { color: "#f8f8f8", fontSize: 15, minHeight: 22, padding: 0 },
+  headerTitle: { color: "#fff", fontSize: 16, fontWeight: "500" },
+  authContent: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 34 },
+  display: { color: "#fff", fontFamily: "InstrumentSerif", fontSize: 32, lineHeight: 40 },
+  field: { minWidth: 0, marginBottom: 26, paddingHorizontal: 4, paddingBottom: 9, borderBottomWidth: 1.5, borderBottomColor: WHITE[48] },
+  fieldLabel: { color: WHITE[64], fontSize: 13, letterSpacing: 0.25, marginBottom: 5 },
+  fieldInput: { flex: 1, color: "#fff", fontSize: 14, minHeight: 22, padding: 0 },
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: 9, marginHorizontal: 4, marginTop: 8, marginBottom: 24 },
-  checkbox: { width: 17, height: 17, borderRadius: 4, borderWidth: 1, borderColor: "#777" },
-  body: { color: "#f5f5f5", fontSize: 14 },
+  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: WHITE[64] },
+  body: { color: "#fff", fontSize: 14, lineHeight: 20 },
   underlined: { textDecorationLine: "underline" },
-  scanLogin: { alignItems: "center", gap: 12, marginTop: 42 },
-  scanTile: { width: 60, height: 60, borderRadius: 18, borderColor: "#555", borderWidth: 1, backgroundColor: "#333", alignItems: "center", justifyContent: "center" },
-  scanButtonIcon: { color: "#fff", fontSize: 30 },
-  progress: { flexDirection: "row", paddingHorizontal: 25, paddingTop: 5, paddingBottom: 18 },
+  scanLogin: { alignItems: "center", gap: 12, marginTop: 48 },
+  scanTile: { width: 64, height: 64, borderRadius: 21, borderColor: WHITE[12], borderWidth: 1.5, backgroundColor: "#323232", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 6 } },
+  progress: { flexDirection: "row", paddingHorizontal: 8, paddingTop: 12, paddingBottom: 18 },
   progressItem: { flex: 1, alignItems: "center" },
   progressLine: { flexDirection: "row", width: "100%", alignItems: "center", justifyContent: "center" },
-  progressDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: "#666", backgroundColor: "#111", alignItems: "center", justifyContent: "center", zIndex: 1 },
+  progressDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: WHITE[48], backgroundColor: "#141414", alignItems: "center", justifyContent: "center", zIndex: 1 },
   progressComplete: { backgroundColor: GOLD, borderColor: GOLD },
-  progressCurrent: { backgroundColor: "#777", borderColor: "#777" },
-  progressCheck: { color: "#17120b", fontSize: 13, fontWeight: "700" },
-  progressConnector: { height: 1, backgroundColor: "#626262", flex: 1, marginHorizontal: -1 },
+  progressCurrent: { backgroundColor: "#777671", borderColor: "#777671" },
+  progressConnector: { height: 1.5, backgroundColor: WHITE[48], flex: 1, marginHorizontal: -1 },
   progressConnectorDone: { backgroundColor: GOLD },
-  progressLabel: { color: MUTED, fontSize: 12, marginTop: 8 },
+  progressLabel: { color: WHITE[64], fontSize: 12, marginTop: 10 },
   goldText: { color: GOLD },
-  formPanel: { flex: 1, borderWidth: 1, borderBottomWidth: 0, borderColor: "#4b4b4b", borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: "#171717" },
-  formContent: { paddingHorizontal: 19, paddingTop: 20, paddingBottom: 32, flexGrow: 1 },
+  formPanel: { flex: 1, borderWidth: 1, borderTopWidth: 2, borderBottomWidth: 0, borderColor: WHITE[24], borderTopLeftRadius: 32, borderTopRightRadius: 32, backgroundColor: "transparent" },
+  formContent: { paddingHorizontal: 19, paddingTop: 22, paddingBottom: 32, flexGrow: 1 },
   fieldRow: { flexDirection: "row", gap: 18 },
   fieldFlex: { flex: 1 },
-  facePreview: { width: 250, height: 250, borderRadius: 125, alignSelf: "center", marginTop: 12, marginBottom: 28, borderWidth: 2, borderStyle: "dashed", borderColor: "#777", alignItems: "center", justifyContent: "center", backgroundColor: "#302b26" },
-  faceEmoji: { fontSize: 125 },
+  facePreview: { width: "76%", maxWidth: 260, aspectRatio: 1, borderRadius: 125, alignSelf: "center", marginTop: 12, marginBottom: 28, borderWidth: 2, borderStyle: "dashed", borderColor: GOLD, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   instructions: { gap: 11, marginBottom: 52 },
   instruction: { color: "#f1f1f1", fontSize: 14 },
-  phoneTile: { alignSelf: "center", width: 118, height: 118, borderRadius: 30, backgroundColor: "#333", borderWidth: 1, borderColor: "#464646", alignItems: "center", justifyContent: "center", marginTop: 46, marginBottom: 64 },
-  phoneIcon: { color: "#ddd", fontSize: 48 },
+  phoneTile: { alignSelf: "center", width: 118, height: 118, borderRadius: 34, backgroundColor: "#333", borderWidth: 2, borderColor: WHITE[12], alignItems: "center", justifyContent: "center", marginTop: 56, marginBottom: 72 },
   otpRow: { flexDirection: "row", justifyContent: "space-between", gap: 10, marginHorizontal: 8, marginBottom: 40 },
-  otpDigit: { flex: 1, color: "#fff", textAlign: "center", fontSize: 30, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: "#747474" },
+  otpDigit: { flex: 1, color: "#fff", textAlign: "center", fontSize: 30, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: WHITE[48] },
   successContent: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
-  successIcon: { width: 80, height: 80, borderRadius: 20, borderWidth: 2, borderColor: GOLD, alignItems: "center", justifyContent: "center", marginBottom: 24 },
-  successCheck: { color: GOLD, fontSize: 38 },
+  successIcon: { width: 80, height: 80, borderRadius: 20, borderWidth: 2, borderColor: GOLD, backgroundColor: "rgba(255,173,22,0.08)", alignItems: "center", justifyContent: "center", marginBottom: 24 },
   centerText: { textAlign: "center" },
   mutedBody: { color: MUTED, fontSize: 14, lineHeight: 21, marginTop: 10, marginBottom: 24 },
-  sendPanel: { flex: 1, borderWidth: 1, borderBottomWidth: 0, borderColor: "#4b4b4b", borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 19, paddingTop: 24, paddingBottom: 16, backgroundColor: "#171717" },
+  sendPanel: { flex: 1, borderWidth: 1, borderTopWidth: 2, borderBottomWidth: 0, borderColor: WHITE[24], borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 19, paddingTop: 24, paddingBottom: 24, backgroundColor: "transparent" },
   sendScroll: { flex: 1 },
   sendContent: { flexGrow: 1, paddingBottom: 16 },
-  surface: { backgroundColor: SURFACE, borderWidth: 1, borderColor: "#3c3c3c", borderRadius: 22, padding: 18, marginBottom: 15 },
+  surface: { backgroundColor: SURFACE, borderWidth: 1, borderColor: WHITE[12], borderRadius: 24, padding: 19, marginBottom: 16, shadowColor: "#000", shadowOpacity: 0.24, shadowRadius: 15, shadowOffset: { width: 0, height: 12 }, elevation: 5 },
   label: { color: MUTED, fontSize: 12 },
-  feeCard: { paddingVertical: 10, marginTop: -1, marginBottom: 20, borderRadius: 15 },
+  feeCard: { paddingVertical: 10, marginTop: -1, marginBottom: 24, borderRadius: 16 },
   feeRow: { flexDirection: "row", justifyContent: "space-between", marginVertical: 6 },
-  divider: { height: 1, backgroundColor: "#494949", marginVertical: 8 },
-  mutedBodyInline: { color: MUTED },
-  searchBox: { minHeight: 50, borderWidth: 1, borderColor: "#444", borderRadius: 14, backgroundColor: SURFACE, color: "#fff", paddingHorizontal: 14, marginBottom: 0 },
+  divider: { height: 1, backgroundColor: WHITE[24], marginVertical: 8 },
+  searchBox: { flex: 1, minHeight: 50, color: "#fff", fontSize: 14, padding: 0 },
   recipientList: { padding: 7, marginBottom: 0 },
   recipientRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, padding: 9, minHeight: 67 },
-  selectedRow: { borderWidth: 1, borderColor: "#555", backgroundColor: "#353535" },
+  selectedRow: { borderWidth: 1, borderColor: WHITE[12], backgroundColor: "rgba(255,255,255,0.08)" },
   avatar: { width: 48, height: 48, overflow: "hidden", textAlign: "center", textAlignVertical: "center", borderRadius: 13, backgroundColor: "#384f87", fontSize: 25 },
   personCopy: { flex: 1 },
-  personName: { color: "#fff", fontSize: 15 },
-  subtle: { color: "#999", fontSize: 12, marginTop: 4 },
-  radio: { width: 18, height: 18, borderWidth: 1, borderColor: "#888", borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  personName: { color: "#fff", fontSize: 16 },
+  subtle: { color: WHITE[64], fontSize: 11, lineHeight: 16, marginTop: 4 },
+  radio: { width: 18, height: 18, borderWidth: 1, borderColor: WHITE[64], borderRadius: 5, alignItems: "center", justifyContent: "center" },
   radioSelected: { backgroundColor: GOLD, borderColor: GOLD },
-  radioCheck: { color: "#17120b", fontSize: 12, fontWeight: "700" },
   sectionLabel: { marginBottom: 10 },
   paymentRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, padding: 9, minHeight: 78 },
   miniCard: { width: 80, height: 54, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   amountText: { color: "#fff", fontSize: 19 },
-  summaryLabel: { borderBottomWidth: 1, borderBottomColor: "#444", paddingBottom: 8, marginBottom: 8 },
+  summaryLabel: { borderBottomWidth: 1, borderBottomColor: WHITE[24], paddingBottom: 8, marginBottom: 8 },
   summaryAmount: { color: "#fff", fontSize: 24, marginBottom: 20 },
   summaryPerson: { flexDirection: "row", alignItems: "center", gap: 13, marginBottom: 18 },
-  totalRow: { borderTopWidth: 1, borderTopColor: "#444", paddingTop: 12, flexDirection: "row", justifyContent: "space-between" },
+  totalRow: { borderTopWidth: 1, borderTopColor: WHITE[24], paddingTop: 12, flexDirection: "row", justifyContent: "space-between" },
   totalText: { color: "#fff", fontSize: 20 },
-  dashboard: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 130 },
-  balanceCard: { borderRadius: 24, borderWidth: 1, borderColor: "#3c3c3c", padding: 20, marginBottom: 16 },
+  dashboard: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 24 },
+  balanceCard: { borderRadius: 24, borderWidth: 1, borderColor: WHITE[12], padding: 19, marginBottom: 16, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 10 } },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   cardTitle: { color: "#fff", fontSize: 15 },
-  addButton: { borderColor: GOLD, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12 },
-  balanceAmount: { color: "#fff", fontSize: 43, letterSpacing: -2, marginVertical: 17 },
-  balanceCents: { color: "#777" },
+  addButton: { borderColor: GOLD, borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 13, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,173,22,0.08)" },
+  balanceAmount: { color: "#fff", fontSize: 48, fontWeight: "400", letterSpacing: -1.5, marginTop: 20, marginBottom: 20 },
+  balanceCents: { color: WHITE[48] },
   quickActions: { flexDirection: "row", justifyContent: "space-around" },
-  quickAction: { alignItems: "center", gap: 7 },
-  quickIcon: { width: 42, height: 42, borderRadius: 13, borderWidth: 2, borderColor: GOLD, alignItems: "center", justifyContent: "center" },
+  quickAction: { alignItems: "center", gap: 10 },
+  quickIcon: { width: 42, height: 42, borderRadius: 13, borderWidth: 2, borderColor: GOLD, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,173,22,0.08)" },
   expensesCard: { minHeight: 304 },
-  period: { color: "#fff", fontSize: 12, borderWidth: 1, borderColor: "#555", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 10 },
-  expenseChart: { height: 210, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 5 },
-  statColumn: { height: 190, justifyContent: "space-between", width: 78 },
+  period: { borderWidth: 1.5, borderColor: WHITE[24], borderRadius: 12, paddingVertical: 5, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  expenseChart: { height: 210, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
+  statColumn: { height: 182, justifyContent: "space-between", width: "24%" },
   stat: { alignItems: "center" },
   legendDot: { width: 20, height: 20, borderRadius: 7, marginBottom: 5 },
-  statNumber: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  donut: { width: 158, height: 158, borderRadius: 79, borderWidth: 18, borderColor: "#dd9c24", borderTopColor: "#a9461e", borderRightColor: "#b83e16", borderBottomColor: "#f6eb68", alignItems: "center", justifyContent: "center" },
-  donutInner: { alignItems: "center" },
-  donutAmount: { color: "#fff", fontSize: 13, fontWeight: "600", marginTop: 4 },
-  chart: { height: 142, marginTop: 18, flexDirection: "row", borderBottomWidth: 1, borderColor: "#3d3d3d", overflow: "hidden" },
-  chartLine: { color: "#777", fontSize: 9, lineHeight: 34, width: 34 },
-  chartFill: { flex: 1, backgroundColor: "#ffb52e30", justifyContent: "center" },
-  chartSpark: { color: GOLD, fontSize: 60, textAlign: "center" },
-  legendRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 12 },
-  green: { color: "#42d76a", fontSize: 17 },
-  red: { color: "#ff4d4d", fontSize: 17 },
+  statNumber: { color: "#fff", fontSize: 18, lineHeight: 25, fontWeight: "600" },
+  legendRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 },
   accountScroll: { gap: 12, paddingTop: 14, paddingRight: 6 },
-  accountCard: { width: 122, minHeight: 140, borderWidth: 1, borderColor: "#4c4c4c", borderRadius: 20, backgroundColor: "#303030", padding: 12, justifyContent: "space-between" },
-  bankMark: { width: 40, height: 40, borderWidth: 1, borderColor: "#926a23", borderRadius: 20, textAlign: "center", textAlignVertical: "center", color: GOLD, fontSize: 23, backgroundColor: "#4b3b1f" },
-  accountAmount: { color: "#fff", fontSize: 18 },
-  aiTeaser: { flexDirection: "row", alignItems: "center", gap: 12, padding: 15, marginBottom: 15, borderRadius: 18, borderWidth: 1, borderColor: "#383838", backgroundColor: "#222" },
-  aiOrbSmall: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: GOLD },
-  orbHorse: { color: "#fff", fontSize: 27 },
-  bottomNav: { minHeight: 88, flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 20, borderTopWidth: 1, borderColor: "#3a3a3a", borderTopLeftRadius: 23, borderTopRightRadius: 23, backgroundColor: "#191919" },
-  navButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  navIcon: { color: "#919191", fontSize: 23 },
-  navSend: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  navSendText: { color: "#17120b", fontSize: 28 },
+  accountCard: { width: 122, minHeight: 148, borderWidth: 1, borderColor: WHITE[12], borderRadius: 22, backgroundColor: "#333333", padding: 12, justifyContent: "space-between" },
+  bankMark: { width: 40, height: 40, borderWidth: 1, borderColor: "rgba(255,173,22,0.48)", borderRadius: 20, backgroundColor: "rgba(255,173,22,0.12)", alignItems: "center", justifyContent: "center" },
+  accountAmount: { color: "#fff", fontSize: 20, lineHeight: 28, fontWeight: "500" },
+  aiTeaser: { flexDirection: "row", alignItems: "center", gap: 12, padding: 15, marginBottom: 15, borderRadius: 18, borderWidth: 1, borderColor: WHITE[12], backgroundColor: "#222" },
+  aiOrbSmall: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  orbLogo: { width: "100%", height: "100%" },
+  bottomNav: { minHeight: 84, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-around", paddingHorizontal: 12, paddingTop: 16, paddingBottom: 14, borderTopWidth: 2, borderColor: WHITE[24], borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: "rgba(32,32,32,0.96)" },
+  navButton: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
+  navSend: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 9 } },
   tabContent: { paddingHorizontal: 20, paddingBottom: 28, flexGrow: 1 },
-  cardCarousel: { height: 230, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginHorizontal: -20 },
-  visualCard: { width: "73%", aspectRatio: 1.56, borderRadius: 24, padding: 20, justifyContent: "space-between", elevation: 8 },
+  cardCarousel: { height: 216, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 20, marginHorizontal: -20 },
+  visualCard: { width: "79%", maxWidth: 320, aspectRatio: 1.56, borderRadius: 24, padding: 20, justifyContent: "space-between", shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 15 }, elevation: 8 },
   sideCard: { width: 38, height: 180, borderRadius: 15 },
   sideCardLeft: { backgroundColor: "#233ca5" },
   sideCardRight: { backgroundColor: "#db3b4c" },
   cardName: { color: "#fff", fontWeight: "600" },
-  mastercard: { fontSize: 19 },
-  cardChip: { width: 35, height: 26, borderRadius: 5, backgroundColor: "#d3ac63", alignItems: "center", justifyContent: "center" },
-  cardNumber: { color: "#fff", fontSize: 17, letterSpacing: 1 },
-  cardOwner: { color: "#fff", fontSize: 10 },
-  dots: { color: "#aaa", textAlign: "center", marginVertical: 12 },
-  sectionCaption: { color: MUTED, fontSize: 12, borderBottomWidth: 1, borderColor: "#444", paddingBottom: 10, marginBottom: 12 },
-  cardBalance: { color: "#fff", fontSize: 42, marginBottom: 20 },
+  mastercard: { width: 40, height: 24, flexDirection: "row" },
+  cardChip: { width: 35, height: 27, borderRadius: 5, backgroundColor: "#D5B568", alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 0.5, borderColor: "#8D753D" },
+  cardNumber: { color: "#fff", fontSize: 20, letterSpacing: 0 },
+  cardOwner: { color: "#fff", fontSize: 11 },
+  sectionCaption: { color: MUTED, fontSize: 12, borderBottomWidth: 1, borderColor: WHITE[24], paddingBottom: 10, marginBottom: 12 },
+  cardBalance: { color: "#fff", fontSize: 48, letterSpacing: -1.5, marginTop: 6, marginBottom: 22 },
   transactionHeader: { marginBottom: 0 },
-  transaction: { flexDirection: "row", alignItems: "center", gap: 13, minHeight: 72, borderBottomWidth: 1, borderColor: "#333" },
+  transaction: { flexDirection: "row", alignItems: "center", gap: 13, minHeight: 72, borderBottomWidth: 1, borderColor: WHITE[12] },
   transactionIcon: { width: 37, height: 37, borderRadius: 12, borderColor: "#24703d", borderWidth: 1, backgroundColor: "#21412a", alignItems: "center", justifyContent: "center" },
-  moreButton: { color: MUTED, fontSize: 22, borderWidth: 1, borderColor: "#444", borderRadius: 10, paddingHorizontal: 9 },
+  moreButton: { width: 32, height: 32, borderWidth: 1.5, borderColor: WHITE[24], borderRadius: 10, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 5, shadowOffset: { width: 0, height: 3 } },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 12 },
-  menuItem: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 64, borderBottomWidth: 1, borderColor: "#3b3b3b" },
-  menuGlyph: { width: 25, color: GOLD, fontSize: 20, textAlign: "center" },
+  menuItem: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 64 },
   menuCount: { color: GOLD, borderWidth: 1, borderColor: GOLD, borderRadius: 14, padding: 4, marginLeft: "auto" },
   aiScreen: { flex: 1 },
   aiContent: { paddingHorizontal: 16, paddingBottom: 16, flexGrow: 1 },
   aiGreeting: { minHeight: 305, alignItems: "center", justifyContent: "center", gap: 18 },
-  aiOrb: { width: 80, height: 80, borderRadius: 40, backgroundColor: GOLD, alignItems: "center", justifyContent: "center", elevation: 14 },
-  suggestion: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#404040", borderRadius: 12, backgroundColor: "#222" },
+  aiOrb: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", shadowColor: GOLD, shadowOpacity: 0.65, shadowRadius: 30, shadowOffset: { width: 0, height: 0 }, elevation: 14 },
+  suggestion: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, padding: 13, marginBottom: 12, borderWidth: 1, borderColor: WHITE[12], borderRadius: 13, backgroundColor: "#222", shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 7, shadowOffset: { width: 0, height: 5 } },
   messageGroup: { gap: 14, paddingTop: 16 },
-  userMessage: { alignSelf: "flex-end", maxWidth: "92%", color: "#fff", backgroundColor: "#222", padding: 14, borderWidth: 1, borderColor: "#404040", borderRadius: 14 },
+  userMessage: { alignSelf: "flex-end", maxWidth: "92%", color: "#fff", backgroundColor: "#222", padding: 14, borderWidth: 1, borderColor: WHITE[12], borderRadius: 14 },
   response: { lineHeight: 21, marginVertical: 6 },
-  chatInput: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, padding: 6, marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderColor: "#454545", borderRadius: 16, backgroundColor: "#191919" },
-  micButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#444", borderRadius: 12, backgroundColor: "#222" },
+  chatInput: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, borderTopWidth: 2, borderColor: WHITE[24], borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: "#222" },
+  micButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: WHITE[12], borderRadius: 12, backgroundColor: "#222", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 4 } },
   chatTextInput: { flex: 1, minHeight: 36, color: "#fff", fontSize: 13, padding: 0 },
-  sendChat: { width: 36, height: 36, borderRadius: 12, backgroundColor: GOLD, alignItems: "center", justifyContent: "center" },
-  sendChatText: { color: "#17120b", fontSize: 22 },
+  sendChat: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });
