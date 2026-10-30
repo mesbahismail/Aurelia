@@ -6,10 +6,12 @@ export { default as ArrowDownLeft } from "lucide-react-native/icons/arrow-down-l
 export { default as ArrowLeftRight } from "lucide-react-native/icons/arrow-left-right";
 export { default as ScanFace } from "lucide-react-native/icons/scan-face";
 export { default as ScanLine } from "lucide-react-native/icons/scan-line";
+export { default as ScanQrCode } from "lucide-react-native/icons/scan-qr-code";
+export { default as UserRound } from "lucide-react-native/icons/user-round";
 export { default as ChevronLeft } from "lucide-react-native/icons/chevron-left";
 export { default as ChevronRight } from "lucide-react-native/icons/chevron-right";
 export { default as TrendingUp } from "lucide-react-native/icons/trending-up";
-export { default as Sparkles } from "lucide-react-native/icons/sparkles";
+export { default as MessageCircle } from "lucide-react-native/icons/message-circle";
 export { default as Wallet } from "lucide-react-native/icons/wallet";
 export { default as CreditCard } from "lucide-react-native/icons/credit-card";
 export { default as Menu } from "lucide-react-native/icons/menu";

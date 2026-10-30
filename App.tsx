@@ -1,23 +1,32 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
-import { ArrowUp, ArrowDown, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, ScanFace, ScanLine, ChevronLeft, ChevronRight, TrendingUp, Sparkles, Wallet, CreditCard, Menu, Plus, Check, X, Smartphone, Landmark, MoreVertical, Pencil, Mic, Users, Clapperboard, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut, CalendarDays, ChartNoAxesColumn, ReceiptText, Info, Search, type LucideIcon } from "./components/icons";
+import { useEffect, useRef, useState, type RefObject, type ComponentRef } from "react";
+import { BlurTargetView } from "expo-blur";
+import { ArrowUp, ArrowDown, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, ScanFace, ScanLine, ChevronLeft, ChevronRight, MessageCircle, Wallet, CreditCard, Menu, Plus, Check, X, Smartphone, Landmark, MoreVertical, Pencil, Mic, Users, Clapperboard, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut, CalendarDays, ChartNoAxesColumn, ReceiptText, Info, Search, type LucideIcon } from "./components/icons";
 import { WHITE, GOLD, GOLD_GRADIENT, GOLD_STOPS, DARK_GRADIENT } from "./components/theme";
+import { MotionProvider, MotionView, MotionGradient, MotionPressable as Pressable } from "./components/Motion";
+import { CalendarOverlay } from "./components/CalendarOverlay";
+import { formatRange, presetRange, sameDay, type DateRange } from "./components/dateRanges";
+import { AddFunds } from "./components/AddFunds";
+import { AIInsightToast, type AIInsight } from "./components/AIInsightToast";
+import { AccountCarousel } from "./components/AccountCarousel";
+import { GlassHeaderBackground } from "./components/GlassHeaderBackground";
 import { ExpenseDonut, TrendChart, EXPENSES } from "./components/Charts";
 import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
   useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type AuthScreen = "welcome" | "login" | "signup" | "app";
 type Tab = "wallet" | "recipients" | "cards" | "menu" | "ai";
@@ -40,6 +49,14 @@ const suggestions = [
   "Show me the unpaid bills for this month",
 ];
 
+const aiInsights: readonly AIInsight[] = [
+  { title: "Spending is up 23%", detail: "Explore what’s driving the change.", prompt: "Help me understand the 23% increase in my expenses and any spending spikes." },
+  { title: "Your activity, at a glance", detail: "Get a quick summary of recent transactions.", prompt: "Summarize my recent activity, including money coming in and going out." },
+  { title: "Earnings are up 23%", detail: "Take a closer look at money coming in.", prompt: "Review my incoming payments and the 23% increase in earnings." },
+  { title: `${EXPENSES[2].label} makes up ${EXPENSES[2].value}%`, detail: "See how your spending categories compare.", prompt: suggestions[0] },
+  { title: "Make room for what matters", detail: "Explore a budget based on your spending.", prompt: suggestions[2] },
+];
+
 const menuIcons = [Clapperboard, Users, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut];
 function MenuIcon({ index }: { index: number }) {
   const Icon = menuIcons[index];
@@ -52,6 +69,16 @@ function SuggestionIcon({ index }: { index: number }) {
 
 function Label({ children, style }: { children: React.ReactNode; style?: object }) {
   return <Text style={[styles.label, style]}>{children}</Text>;
+}
+
+function OrDivider() {
+  return (
+    <View style={styles.orRow}>
+      <LinearGradient colors={["rgba(255,255,255,0)", WHITE[24]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.rule} />
+      <Text style={styles.orText}>OR</Text>
+      <LinearGradient colors={[WHITE[24], "rgba(255,255,255,0)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.rule} />
+    </View>
+  );
 }
 
 function ActionButton({
@@ -92,19 +119,29 @@ function Header({
   title,
   onBack,
   right,
+  onAI,
+  floating = false,
+  scrolled = false,
+  blurTarget,
 }: {
   title: string;
   onBack?: () => void;
   right?: React.ReactNode;
+  onAI?: () => void;
+  floating?: boolean;
+  scrolled?: boolean;
+  blurTarget?: RefObject<ComponentRef<typeof View> | null>;
 }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={styles.headerSide}>
-        {onBack ? <ChevronLeft size={28} color="#fff" strokeWidth={1.8} /> : <Sparkles size={22} color="#fff" strokeWidth={1.8} />}
+    <View style={[styles.header, floating && styles.floatingHeader, floating && { top: insets.top + 8 }]}>
+      {floating && <GlassHeaderBackground active={scrolled} blurTarget={blurTarget} />}
+      <Pressable accessibilityRole="button" accessibilityLabel={onBack ? "Go back" : "Open AI chat"} onPress={onBack ?? onAI} style={styles.headerSide}>
+        {onBack ? <ChevronLeft size={28} color="#fff" strokeWidth={1.8} /> : <MessageCircle size={22} color="#fff" strokeWidth={1.8} />}
       </Pressable>
-      <Text style={styles.headerTitle}>{title}</Text>
+      <MotionView motionKey={title} distance={5} duration={240}><Text style={styles.headerTitle}>{title}</Text></MotionView>
       <View style={[styles.headerSide, styles.headerRight]}>
-        {right !== undefined ? right : !onBack && <TrendingUp size={23} color="#fff" strokeWidth={1.8} />}
+        {right}
       </View>
     </View>
   );
@@ -181,29 +218,51 @@ function Field({
   );
 }
 
-function Surface({ children, style }: { children: React.ReactNode; style?: object }) {
-  return <LinearGradient colors={["#282828", "#242424"]} style={[styles.surface, style]}>{children}</LinearGradient>;
+function Surface({ children, style, delay = 40 }: { children: React.ReactNode; style?: object; delay?: number }) {
+  return <MotionGradient delay={delay} colors={["#282828", "#242424"]} style={[styles.surface, style]}>{children}</MotionGradient>;
 }
 
 function AppContent() {
   const { width: viewportWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const screenWidth = Math.min(viewportWidth, 440);
   const balanceSize = Math.min(48, (screenWidth - 64) * 0.146);
   const [auth, setAuth] = useState<AuthScreen>("welcome");
   const [tab, setTab] = useState<Tab>("wallet");
   const [signupStep, setSignupStep] = useState(0);
   const [sendStep, setSendStep] = useState<number | null>(null);
+  const [addFundsOpen, setAddFundsOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(2);
   const [selectedCard, setSelectedCard] = useState(1);
   const [cardIndex, setCardIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [insightHeight, setInsightHeight] = useState(118);
+  const [navigationHeight, setNavigationHeight] = useState(84);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
+  const blurTarget = useRef<ComponentRef<typeof View>>(null);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(() => presetRange("today"));
+  const dateLabel = sameDay(selectedRange.start, selectedRange.end)
+    ? selectedRange.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+    : "Date range";
+
+  useEffect(() => { setHeaderScrolled(false); }, [auth, tab, sendStep, addFundsOpen]);
+  const trackHeaderScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = event.nativeEvent.contentOffset.y;
+    setHeaderScrolled(current => offset > 16 || (current && offset > 4));
+  };
 
   const enterWallet = () => {
     setAuth("app");
     setTab("wallet");
     setSendStep(null);
+    setAddFundsOpen(false);
+  };
+  const openAddFunds = () => {
+    setCalendarOpen(false);
+    setAddFundsOpen(true);
   };
   const startSignup = () => {
     setSignupStep(0);
@@ -221,21 +280,21 @@ function AppContent() {
       <LinearGradient colors={["#FFEEAF", "#FFDF4B", "#F2AD3C", "#D36221"]} locations={[0, 0.24, 0.48, 1]} style={styles.flex}>
         <StatusBar style="light" />
         <ScrollView contentContainerStyle={styles.welcome} showsVerticalScrollIndicator={false}>
-        <View style={styles.brand}>
-          <View style={styles.brandMark}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia logo" style={styles.brandLogo} /></View>
+        <MotionView duration={650} distance={20} style={styles.brand}>
+          <MotionView delay={60} duration={700} distance={0} fromScale={0.9} style={styles.brandMark}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia logo" style={styles.brandLogo} /></MotionView>
           <Text style={styles.brandName}>Aurelia</Text>
           <Text style={styles.tagline}>Believe in the Golden Rule, Gold{"\n"}always Rules.</Text>
           <View style={[styles.goldDash, styles.welcomeDash]} />
-        </View>
-        <View style={styles.welcomeActions}>
+        </MotionView>
+        <MotionView delay={170} duration={500} distance={18} style={styles.welcomeActions}>
           <Pressable onPress={() => setAuth("login")} style={styles.faceButton}>
-            <ScanFace size={30} color="#fff" strokeWidth={1.8} />
+            <ScanFace size={26} color="#fff" strokeWidth={1.8} />
           </Pressable>
           <Text style={styles.scanCaption}>Scan my face</Text>
           <ActionButton white onPress={() => setAuth("login")}>Login</ActionButton>
-          <View style={styles.orRow}><View style={styles.rule} /><Text style={styles.orText}>OR</Text><View style={styles.rule} /></View>
+          <OrDivider />
           <ActionButton onPress={startSignup} secondary>Sign up</ActionButton>
-        </View>
+        </MotionView>
         </ScrollView>
       </LinearGradient>
     );
@@ -247,6 +306,7 @@ function AppContent() {
         <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
           <StatusBar style="light" />
           <Header title="Login" onBack={() => setAuth("welcome")} />
+          <MotionView style={styles.flex} motionKey="login">
           <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.display}>Add your details and login into your account today</Text>
             <View style={styles.goldDash} />
@@ -254,13 +314,14 @@ function AppContent() {
             <Field label="Password" value="password123456" secure />
             <Pressable style={styles.checkboxRow}><View style={styles.checkbox} /><Text style={styles.body}>Save login info</Text></Pressable>
             <ActionButton onPress={enterWallet}>Login</ActionButton>
-            <View style={styles.orRow}><View style={styles.rule} /><Text style={styles.orText}>OR</Text><View style={styles.rule} /></View>
+            <OrDivider />
             <ActionButton onPress={startSignup} secondary>Sign up</ActionButton>
             <Pressable onPress={enterWallet} style={styles.scanLogin}>
-              <View style={styles.scanTile}><ScanFace size={30} color="#fff" strokeWidth={1.8} /></View>
+              <View style={styles.scanTile}><ScanFace size={26} color="#fff" strokeWidth={1.8} /></View>
               <Text style={styles.body}>Scan my face</Text>
             </Pressable>
           </ScrollView>
+          </MotionView>
         </SafeAreaView>
       </KeyboardAvoidingView>
     );
@@ -275,6 +336,7 @@ function AppContent() {
           onBack={() => signupStep ? setSignupStep(signupStep - 1) : setAuth("welcome")}
         />
         <Progress active={signupStep} labels={["Details", "Face scan", "Security"]} />
+        <MotionView style={styles.flex} motionKey={signupStep}>
         <ScrollView style={styles.formPanel} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
           {signupStep === 0 && <>
             <Text style={styles.display}>Add your details</Text><View style={styles.goldDash} />
@@ -308,12 +370,23 @@ function AppContent() {
             <ActionButton onPress={() => setSignupStep(3)}>Next</ActionButton>
           </>}
           {signupStep === 3 && <View style={styles.successContent}>
-            <View style={styles.successIcon}><Check size={38} color={GOLD} strokeWidth={1.8} /></View>
+            <MotionView delay={100} duration={500} distance={0} fromScale={0.72} style={styles.successIcon}><Check size={38} color={GOLD} strokeWidth={1.8} /></MotionView>
             <Text style={[styles.display, styles.centerText]}>Your account is set!</Text>
             <Text style={[styles.mutedBody, styles.centerText]}>After a few simple steps, your wallet account is ready to go. Add funds and start using Aurelia.</Text>
             <ActionButton onPress={enterWallet} compact icon={Check}>Got it</ActionButton>
           </View>}
         </ScrollView>
+        </MotionView>
+      </SafeAreaView>
+    );
+  }
+
+  if (addFundsOpen) {
+    return (
+      <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
+        <StatusBar style="light" />
+        <Header title="Add funds" onBack={() => setAddFundsOpen(false)} />
+        <AddFunds />
       </SafeAreaView>
     );
   }
@@ -325,7 +398,7 @@ function AppContent() {
         <StatusBar style="light" />
         <Header title="Send money" onBack={() => sendStep === 0 ? setSendStep(null) : setSendStep(sendStep - 1)} />
         <Progress active={sendStep === 4 ? 4 : sendStep} labels={labels} />
-        <View style={styles.sendPanel}>
+        <MotionView motionKey={sendStep} style={styles.sendPanel}>
           <ScrollView style={styles.sendScroll} contentContainerStyle={styles.sendContent} keyboardShouldPersistTaps="handled">
             {sendStep === 0 && <>
               <Field boxed currency="USD" label="You send" value="$ 1,000" />
@@ -375,14 +448,14 @@ function AppContent() {
               <View style={styles.totalRow}><Text style={styles.totalText}>Total</Text><Text style={styles.totalText}>€ 982.73</Text></View>
             </>}
             {sendStep === 4 && <View style={styles.successContent}>
-              <View style={styles.successIcon}><Check size={38} color={GOLD} strokeWidth={1.8} /></View>
+              <MotionView delay={100} duration={500} distance={0} fromScale={0.72} style={styles.successIcon}><Check size={38} color={GOLD} strokeWidth={1.8} /></MotionView>
               <Text style={[styles.display, styles.centerText]}>Successful operation!</Text>
               <Text style={[styles.mutedBody, styles.centerText]}>Your transfer is on its way. You can follow its progress in your activity.</Text>
               <ActionButton onPress={() => setSendStep(null)} compact icon={Check}>Got it</ActionButton>
             </View>}
           </ScrollView>
           {sendStep < 4 && <ActionButton onPress={nextSend}>{sendStep === 3 ? "Pay" : "Pay"}</ActionButton>}
-        </View>
+        </MotionView>
       </SafeAreaView>
     );
   }
@@ -399,14 +472,11 @@ function AppContent() {
   return (
     <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
       <StatusBar style="light" />
-      <Header
-        title={tabTitle[tab]}
-        onBack={tab === "ai" ? () => setTab("wallet") : undefined}
-        right={tab === "ai" ? null : <Pressable accessibilityLabel="Open AI chat" onPress={goToAI}><TrendingUp size={23} color="#fff" strokeWidth={1.8} /><View style={styles.notificationDot} /></Pressable>}
-      />
-      {tab === "wallet" && <ScrollView contentContainerStyle={styles.dashboard} showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={["#292929", "#232323"]} style={styles.balanceCard}>
-          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Balance</Text><Text style={styles.subtle}>Today, 21 Feb</Text></View><Pressable onPress={() => setSendStep(0)} style={styles.addButton}><Plus size={14} color={GOLD} /><Text style={styles.goldText}>Add</Text></Pressable></View>
+      <BlurTargetView ref={blurTarget} style={styles.flex}>
+      <MotionView style={styles.flex} motionKey={tab} distance={10} duration={300}>
+      {tab === "wallet" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.dashboard, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]} showsVerticalScrollIndicator={false}>
+        <MotionGradient distance={16} duration={440} colors={["#292929", "#232323"]} style={styles.balanceCard}>
+          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Balance</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Add funds" onPress={openAddFunds} style={styles.addButton}><Plus size={14} color={GOLD} /><Text style={styles.goldText}>Add</Text></Pressable></View>
           <Text style={[styles.balanceAmount, { fontSize: balanceSize }]}>$238,219<Text style={styles.balanceCents}>.32</Text></Text>
           <View style={styles.quickActions}>
             {([[ArrowUp, "Send"], [ArrowDown, "Receive"], [ScanLine, "Scan"], [ArrowLeftRight, "Convert"]] as const).map(([Icon, label]) => (
@@ -415,33 +485,32 @@ function AppContent() {
               </Pressable>
             ))}
           </View>
-        </LinearGradient>
-        <Surface style={styles.expensesCard}>
-          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Expenses</Text><Text style={styles.subtle}>This week, 14 – 21 Feb</Text></View><View style={styles.period}><CalendarDays size={16} color="#fff" /><Text style={styles.periodText}>This week</Text></View></View>
+        </MotionGradient>
+        <Surface delay={70} style={styles.expensesCard}>
+          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Expenses</Text></View></View>
           <View style={styles.expenseChart}>
             <View style={styles.statColumn}>{[EXPENSES[0], EXPENSES[3]].map((item) => <View key={item.label} style={styles.stat}><View style={[styles.legendDot, { backgroundColor: item.color }]} /><Text style={styles.statNumber}>{item.value}%</Text><Text style={styles.chartCaption}>{item.label}</Text></View>)}</View>
             <ExpenseDonut />
             <View style={styles.statColumn}>{[EXPENSES[1], EXPENSES[2]].map((item) => <View key={item.label} style={styles.stat}><View style={[styles.legendDot, { backgroundColor: item.color }]} /><Text style={styles.statNumber}>{item.value}%</Text><Text style={styles.chartCaption}>{item.label}</Text></View>)}</View>
           </View>
         </Surface>
-        <Surface>
-          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Activity</Text><Text style={styles.subtle}>This week, 14 – 21 Feb</Text></View><View style={styles.period}><CalendarDays size={16} color="#fff" /><Text style={styles.periodText}>This month</Text></View></View>
+        <Surface delay={130}>
+          <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Activity</Text></View></View>
           <TrendChart activity />
           <View style={styles.legendRow}>
             <View style={styles.activityStat}><View><Text style={styles.body}>Earnings</Text><Text style={styles.statNumber}>+23%</Text></View><ArrowUpRight size={25} color="#43E433" strokeWidth={1.5} /></View>
             <View style={[styles.activityStat, styles.activityStatDivider]}><View><Text style={styles.body}>Expenses</Text><Text style={styles.statNumber}>+23%</Text></View><ArrowDownLeft size={25} color="#FF453A" strokeWidth={1.5} /></View>
           </View>
         </Surface>
-        <Surface>
+        <Surface delay={190}>
           <View style={styles.rowBetween}><Text style={styles.cardTitle}>My accounts</Text><Pressable onPress={() => setTab("cards")} style={styles.addButton}><Plus size={14} color={GOLD} /><Text style={styles.goldText}>Add</Text></Pressable></View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accountScroll}>
+          <AccountCarousel>
             {["PayPal Account", "PayPal Account", "Savings"].map((name, index) => <Pressable key={`${name}-${index}`} onPress={() => setTab("cards")} style={styles.accountCard}><View style={styles.accountTop}><View style={styles.bankMark}><Landmark size={20} color={GOLD} strokeWidth={1.8} /></View><MoreVertical size={17} color={WHITE[48]} /></View><Text style={styles.subtle}>{name}</Text><Text style={styles.accountAmount}>$12,724</Text></Pressable>)}
-          </ScrollView>
+          </AccountCarousel>
         </Surface>
-        <Pressable onPress={goToAI} style={styles.aiTeaser}><View style={styles.aiOrbSmall}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia AI" style={styles.orbLogo} /></View><View style={styles.personCopy}><Text style={styles.body}>Your money, made clearer</Text><Text style={styles.subtle}>Ask Aurelia AI for a personal insight</Text></View><ChevronRight size={18} color={MUTED} /></Pressable>
       </ScrollView>}
-      {tab === "cards" && <ScrollView contentContainerStyle={styles.tabContent}>
-        <View style={styles.cardCarousel}>
+      {tab === "cards" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
+        <MotionView motionKey={cardIndex} distance={8} fromScale={0.98} style={styles.cardCarousel}>
           <Pressable onPress={() => setCardIndex((cardIndex + 3) % 4)} style={[styles.sideCard, styles.sideCardLeft]} />
           <LinearGradient colors={["#26152C", "#5C14D4", "#762CF0", "#78A6FF", "#FFEFF8"]} locations={[0, 0.4, 0.65, 0.82, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.visualCard}>
             <View style={styles.rowBetween}><Text style={styles.cardName}>Junior Card</Text><View style={styles.mastercard}><View style={styles.mastercardRed} /><View style={styles.mastercardOrange} /></View></View>
@@ -450,27 +519,27 @@ function AppContent() {
             <View style={styles.rowBetween}><Text style={styles.cardOwner}>Aurelia Kaizer</Text><Text style={styles.cardOwner}>14/28</Text></View>
           </LinearGradient>
           <Pressable onPress={() => setCardIndex((cardIndex + 1) % 4)} style={[styles.sideCard, styles.sideCardRight]} />
-        </View>
+        </MotionView>
         <View style={styles.pagination}>{[0, 1, 2, 3].map((index) => <View key={index} style={[styles.paginationDot, index === cardIndex && styles.paginationActive]} />)}</View>
         <Text style={styles.sectionCaption}>Card amount</Text><Text style={[styles.cardBalance, { fontSize: balanceSize }]}>$31,204<Text style={styles.balanceCents}>.94</Text></Text>
         <Text style={[styles.sectionCaption, styles.transactionHeader]}>Latest transactions</Text>
         {["Electricity", "Electricity", "Electricity"].map((name, index) => <View style={styles.transaction} key={`${name}-${index}`}><View style={styles.transactionIcon}><ArrowUp size={24} color="#50B754" strokeWidth={1.6} /></View><View style={styles.personCopy}><Text style={styles.body}>{name}</Text><Text style={styles.subtle}>9:53 AM</Text></View><Text style={styles.body}>+4.000</Text></View>)}
         <ActionButton icon={Plus} onPress={() => setTab("menu")}>Add new card</ActionButton>
       </ScrollView>}
-      {tab === "recipients" && <ScrollView contentContainerStyle={styles.tabContent}>
+      {tab === "recipients" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
         {["Asher Allen", "Amelia Archer", "Aaron Adams", "Ava Anderson", "Brandon Cole", ...recipients.map(([name]) => name)].map((name, index) => <View key={`${name}-${index}`} style={styles.transaction}><Text style={styles.avatar}>{recipients[index % recipients.length][2]}</Text><Text style={[styles.body, styles.personCopy]}>{name}</Text><Pressable accessibilityLabel={`More options for ${name}`} style={styles.moreButton}><MoreVertical size={18} color={MUTED} /></Pressable></View>)}
         <ActionButton icon={Plus} onPress={() => setSendStep(0)}>Add recipient</ActionButton>
       </ScrollView>}
-      {tab === "menu" && <ScrollView contentContainerStyle={styles.tabContent}>
+      {tab === "menu" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
         <View style={styles.profileRow}><Text style={styles.avatar}>👩🏼‍💼</Text><View style={styles.personCopy}><Text style={styles.cardTitle}>Aurelia Kaiser</Text><Text style={styles.subtle}>View profile</Text></View><View style={styles.period}><Pencil size={15} color="#fff" /><Text style={styles.periodText}>Edit</Text></View></View>
         {["Subscriptions", "Recipients", "Payments", "Utilities", "Shopping list", "Support", "FAQs", "Logout"].map((item, index) => <Pressable key={item} style={styles.menuItem} onPress={() => item === "Logout" ? setAuth("welcome") : item === "Recipients" ? setTab("recipients") : item === "Payments" ? setSendStep(0) : setTab("cards")}><MenuIcon index={index} /><View style={styles.menuItemCopy}><Text style={styles.body}>{item}</Text>{index === 0 || index === 4 ? <Text style={styles.menuCount}>{index === 0 ? "2" : "15"}</Text> : null}</View></Pressable>)}
       </ScrollView>}
       {tab === "ai" && <KeyboardAvoidingView style={styles.aiScreen} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={12}>
-        <ScrollView contentContainerStyle={styles.aiContent} keyboardShouldPersistTaps="handled">
+        <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.aiContent, styles.belowFloatingHeader]} keyboardShouldPersistTaps="handled">
           {messages.length === 0 ? <>
             <View style={styles.aiGreeting}><View style={styles.aiOrb}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia AI" style={styles.orbLogo} /></View><Text style={[styles.display, styles.centerText]}>Hi, how can I help you today?</Text></View>
             {suggestions.map((item, index) => <Pressable key={item} onPress={() => sendMessage(item)} style={styles.suggestion}><SuggestionIcon index={index} /><Text style={[styles.body, styles.personCopy]}>{item}</Text><ChevronRight size={18} color={WHITE[48]} /></Pressable>)}
-          </> : messages.map((message, index) => <View key={`${message}-${index}`} style={styles.messageGroup}><Text style={styles.userMessage}>{message}</Text><Text style={[styles.body, styles.response]}>Here is a helpful overview based on your recent activity. Your spending is on track, and your balance is looking healthy.</Text><Surface><Text style={styles.cardTitle}>My spending trends</Text><TrendChart /><Text style={styles.subtle}>Your spending has stayed consistent over the past few months.</Text></Surface><View style={styles.feedback}><Text style={styles.body}>Are you satisfied with this answer?</Text><View style={styles.feedbackOptions}><View style={styles.feedbackOption}><Check size={16} color={MUTED} /><Text style={styles.body}>Yes</Text></View><View style={[styles.feedbackOption, styles.feedbackNo]}><X size={16} color={MUTED} /><Text style={styles.body}>No</Text></View></View></View></View>)}
+          </> : messages.map((message, index) => <MotionView key={`${message}-${index}`} distance={14} duration={420} style={styles.messageGroup}><Text style={styles.userMessage}>{message}</Text><Text style={[styles.body, styles.response]}>Here is a helpful overview based on your recent activity. Your spending is on track, and your balance is looking healthy.</Text><Surface><Text style={styles.cardTitle}>My spending trends</Text><TrendChart /><Text style={styles.subtle}>Your spending has stayed consistent over the past few months.</Text></Surface><View style={styles.feedback}><Text style={styles.body}>Are you satisfied with this answer?</Text><View style={styles.feedbackOptions}><View style={styles.feedbackOption}><Check size={16} color={MUTED} /><Text style={styles.body}>Yes</Text></View><View style={[styles.feedbackOption, styles.feedbackNo]}><X size={16} color={MUTED} /><Text style={styles.body}>No</Text></View></View></View></MotionView>)}
         </ScrollView>
         <View style={styles.chatInput}>
           <Pressable style={styles.micButton}><Mic size={18} color={MUTED} strokeWidth={1.7} /></Pressable>
@@ -478,14 +547,27 @@ function AppContent() {
           <Pressable accessibilityLabel="Send message" onPress={() => sendMessage()}><LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.sendChat}><ArrowUp size={23} color="#111" strokeWidth={1.7} /></LinearGradient></Pressable>
         </View>
       </KeyboardAvoidingView>}
-      {tab !== "ai" && <View style={styles.bottomNav}>
-        {([["wallet", Wallet, "Wallet"], ["recipients", ArrowLeftRight, "Transfers"], ["send", Plus, "Send"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
-          <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} onPress={() => destination === "send" ? setSendStep(0) : setTab(destination)} style={styles.navButton}>
-            {tab === destination && <View style={styles.navIndicator} />}
-            {destination === "send" ? <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.navSend}><Icon size={25} color="#111" strokeWidth={1.8} /></LinearGradient> : <Icon size={27} color={tab === destination ? GOLD : WHITE[48]} strokeWidth={2} />}
+      </MotionView>
+      </BlurTargetView>
+      <CalendarOverlay visible={calendarOpen} range={selectedRange} onApply={setSelectedRange} onClose={() => setCalendarOpen(false)} blurTarget={blurTarget} />
+      {tab !== "ai" && <View style={styles.navigationDock} onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)}>
+        <View style={styles.bottomNav}>
+        {([["wallet", Wallet, "Wallet"], ["recipients", ArrowLeftRight, "Transfers"], ["add", Plus, "Add funds"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
+          <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} onPress={() => destination === "add" ? openAddFunds() : setTab(destination)} style={styles.navButton}>
+            {tab === destination && <MotionView duration={240} distance={0} fromScale={0.5} style={styles.navIndicator} />}
+            {destination === "add" ? <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.navSend}><Icon size={25} color="#111" strokeWidth={1.8} /></LinearGradient> : <Icon size={27} color={tab === destination ? GOLD : WHITE[48]} strokeWidth={2} />}
           </Pressable>
         ))}
+        </View>
       </View>}
+      {tab !== "ai" && !calendarOpen && <AIInsightToast insights={aiInsights} bottom={navigationHeight + insets.bottom} onHeightChange={setInsightHeight} onOpen={(question) => { setPrompt(question); setTab("ai"); }} />}
+      <Header
+        floating scrolled={headerScrolled} blurTarget={blurTarget}
+        title={tabTitle[tab]}
+        onBack={tab === "ai" ? () => setTab("wallet") : undefined}
+        onAI={goToAI}
+        right={<Pressable accessibilityRole="button" accessibilityLabel={`Choose date range, ${formatRange(selectedRange)}`} onPress={() => setCalendarOpen(true)} style={styles.dateControl}><CalendarDays size={18} color="#fff" /><Text style={styles.periodText}>{dateLabel}</Text></Pressable>}
+      />
     </SafeAreaView>
   );
 }
@@ -502,7 +584,7 @@ export default function App() {
     <SafeAreaProvider>
       <View style={styles.canvas}>
         <LinearGradient colors={DARK_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.appFrame}>
-          <AppContent />
+          <MotionProvider><AppContent /></MotionProvider>
         </LinearGradient>
       </View>
     </SafeAreaProvider>
@@ -529,6 +611,7 @@ const styles = StyleSheet.create({
   welcomeDash: { width: 31, height: 5, backgroundColor: WHITE[48], marginBottom: 0, marginTop: 18 },
   inlineInfo: { flexDirection: "row", gap: 8, alignItems: "center", marginVertical: 2 },
   notificationDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GOLD, alignSelf: "center", marginTop: 6 },
+  dateControl: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 40 },
   periodText: { color: "#fff", fontSize: 13 },
   chartCaption: { color: WHITE[64], fontSize: 11, lineHeight: 16, marginTop: 3, textAlign: "center" },
   activityStat: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 16 },
@@ -545,27 +628,29 @@ const styles = StyleSheet.create({
   feedbackNo: { borderLeftWidth: 1, borderColor: WHITE[24] },
   flex: { flex: 1 },
   app: { flex: 1, backgroundColor: "transparent" },
-  welcome: { flexGrow: 1, justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 68, paddingBottom: 54 },
-  brand: { alignItems: "center", paddingTop: 40 },
+  welcome: { flexGrow: 1, justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 40, paddingBottom: 40, gap: 56 },
+  brand: { alignItems: "center", paddingTop: 12 },
   brandMark: { width: 118, height: 118, borderRadius: 59, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", shadowColor: "#7E4D17", shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 14 }, elevation: 12 },
   brandLogo: { width: 80, height: 80 },
   brandName: { color: "#fff", fontFamily: "InstrumentSerif", fontSize: 56, lineHeight: 66, marginTop: 18, textShadowColor: "#75471F66", textShadowRadius: 2, textShadowOffset: { width: 0, height: 2 } },
   tagline: { color: "#fff", fontFamily: "InstrumentSerif", fontSize: 28, lineHeight: 38, textAlign: "center", marginTop: 4, textShadowColor: "#75471F66", textShadowRadius: 2, textShadowOffset: { width: 0, height: 2 } },
   goldDash: { width: 24, height: 4, backgroundColor: GOLD, marginTop: 18, marginBottom: 38 },
-  welcomeActions: { alignItems: "center", gap: 12 },
-  faceButton: { width: 64, height: 64, borderRadius: 21, borderWidth: 2, borderColor: WHITE[64], alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
-  scanCaption: { color: "#fff", fontSize: 15, marginBottom: 28 },
+  welcomeActions: { alignItems: "center", gap: 8 },
+  faceButton: { width: 54, height: 54, borderRadius: 18, borderWidth: 2, borderColor: WHITE[64], alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  scanCaption: { color: "#fff", fontSize: 14, marginBottom: 36 },
   actionButton: { minHeight: 40, width: "100%", backgroundColor: GOLD, borderRadius: 12, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
   actionText: { color: "#111", fontSize: 15, fontWeight: "500" },
   secondaryButton: { borderWidth: 1.5, borderColor: WHITE[48], backgroundColor: "transparent", shadowOpacity: 0, elevation: 0 },
   secondaryText: { color: "#fff" },
   compactButton: { width: "auto", alignSelf: "center", minWidth: 96 },
   pressed: { opacity: 0.78 },
-  orRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12, paddingHorizontal: 8, marginVertical: 22 },
-  rule: { flex: 1, height: 1, backgroundColor: WHITE[24] },
+  orRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12, paddingHorizontal: 8, marginVertical: 8 },
+  rule: { flex: 1, height: 1 },
   orText: { color: WHITE[48], fontSize: 11 },
   header: { minHeight: 64, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerSide: { width: 42, height: 40, justifyContent: "center" },
+  floatingHeader: { position: "absolute", left: 12, right: 12, minHeight: 56, borderRadius: 999, paddingHorizontal: 16, zIndex: 10 },
+  belowFloatingHeader: { paddingTop: 80 },
+  headerSide: { width: 90, height: 40, justifyContent: "center" },
   headerRight: { alignItems: "flex-end" },
   headerTitle: { color: "#fff", fontSize: 16, fontWeight: "500" },
   authContent: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 34 },
@@ -578,7 +663,7 @@ const styles = StyleSheet.create({
   body: { color: "#fff", fontSize: 14, lineHeight: 20 },
   underlined: { textDecorationLine: "underline" },
   scanLogin: { alignItems: "center", gap: 12, marginTop: 48 },
-  scanTile: { width: 64, height: 64, borderRadius: 21, borderColor: WHITE[12], borderWidth: 1.5, backgroundColor: "#323232", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 6 } },
+  scanTile: { width: 54, height: 54, borderRadius: 18, borderColor: WHITE[12], borderWidth: 1.5, backgroundColor: "#323232", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 6 } },
   progress: { flexDirection: "row", paddingHorizontal: 8, paddingTop: 12, paddingBottom: 18 },
   progressItem: { flex: 1, alignItems: "center" },
   progressLine: { flexDirection: "row", width: "100%", alignItems: "center", justifyContent: "center" },
@@ -648,12 +733,10 @@ const styles = StyleSheet.create({
   legendDot: { width: 20, height: 20, borderRadius: 7, marginBottom: 5 },
   statNumber: { color: "#fff", fontSize: 18, lineHeight: 25, fontWeight: "600" },
   legendRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 },
-  accountScroll: { gap: 12, paddingTop: 14, paddingRight: 6 },
   accountCard: { width: 122, minHeight: 148, borderWidth: 1, borderColor: WHITE[12], borderRadius: 22, backgroundColor: "#333333", padding: 12, justifyContent: "space-between" },
   bankMark: { width: 40, height: 40, borderWidth: 1, borderColor: "rgba(255,173,22,0.48)", borderRadius: 20, backgroundColor: "rgba(255,173,22,0.12)", alignItems: "center", justifyContent: "center" },
   accountAmount: { color: "#fff", fontSize: 20, lineHeight: 28, fontWeight: "500" },
-  aiTeaser: { flexDirection: "row", alignItems: "center", gap: 12, padding: 15, marginBottom: 15, borderRadius: 18, borderWidth: 1, borderColor: WHITE[12], backgroundColor: "#222" },
-  aiOrbSmall: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  navigationDock: { position: "relative", zIndex: 2 },
   orbLogo: { width: "100%", height: "100%" },
   bottomNav: { minHeight: 84, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-around", paddingHorizontal: 12, paddingTop: 16, paddingBottom: 14, borderTopWidth: 2, borderColor: WHITE[24], borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: "rgba(32,32,32,0.96)" },
   navButton: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },

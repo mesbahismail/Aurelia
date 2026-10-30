@@ -8,4 +8,4 @@ export const WHITE = {
 export const GOLD = '#FFAD16';
 export const GOLD_GRADIENT = ['#FFEEAF', '#FFD345', '#F2AD3C', '#D36221'] as const;
 export const GOLD_STOPS = [0, 0.24, 0.48, 1] as const;
-export const DARK_GRADIENT = ['#101010', '#171717', '#222222'] as const;
+export const DARK_GRADIENT = ['#101010', '#151515', '#1A1A1A'] as const;
