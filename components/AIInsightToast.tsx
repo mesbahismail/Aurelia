@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, AppState, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight } from './icons';
+import { X } from './icons';
 import { MotionPressable, useReducedMotion } from './Motion';
 import { WHITE } from './theme';
 
 export type AIInsight = { title: string; detail: string; prompt: string };
 
-const CYCLE_MS = 10_000;
+const CYCLE_MS = 30_000;
 const VISIBLE_MS = 3_000;
 const EXIT_MS = 200;
 
@@ -22,6 +22,7 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
   const [foreground, setForeground] = useState(AppState.currentState == null || AppState.currentState === 'active');
   const reveal = useRef(new Animated.Value(0)).current;
   const nextInsight = useRef(0);
+  const dismiss = useRef<() => void>(() => {});
   const reduced = useReducedMotion();
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
@@ -46,7 +47,18 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
     }
     let exitTimer: ReturnType<typeof setTimeout>;
     let hideTimer: ReturnType<typeof setTimeout>;
+    let expiresAt = 0;
+    dismiss.current = () => {
+      clearTimeout(exitTimer);
+      reveal.stopAnimation();
+      if (reducedRef.current) { reveal.setValue(0); setVisible(false); return; }
+      Animated.timing(reveal, {
+        toValue: 0, duration: Math.min(EXIT_MS, Math.max(0, expiresAt - Date.now())),
+        easing: Easing.in(Easing.quad), useNativeDriver: Platform.OS !== 'web', isInteraction: false,
+      }).start(({ finished }) => { if (finished) setVisible(false); });
+    };
     const show = () => {
+      expiresAt = Date.now() + VISIBLE_MS;
       setIndex(nextInsight.current % insights.length);
       nextInsight.current += 1;
       setVisible(true);
@@ -80,6 +92,7 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
       clearTimeout(hideTimer);
       reveal.stopAnimation();
       reveal.setValue(0);
+      dismiss.current = () => {};
     };
   }, [foreground, insights.length, reveal]);
 
@@ -113,7 +126,9 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
           <Text style={styles.title}>{insight.title}</Text>
           <Text style={styles.detail}>{insight.detail}</Text>
         </View>
-        <ChevronRight size={17} color={WHITE[64]} strokeWidth={1.8} />
+      </MotionPressable>
+      <MotionPressable accessibilityRole="button" accessibilityLabel="Dismiss AI notification" disabled={!visible} onPress={() => dismiss.current()} hitSlop={5} style={styles.close}>
+        <X size={13} color={WHITE[64]} strokeWidth={1.8} />
       </MotionPressable>
     </Animated.View>
   </Animated.View>;
@@ -122,7 +137,8 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
 const styles = StyleSheet.create({
   overlay: { position: 'absolute', left: 0, right: 0, paddingTop: 30, paddingHorizontal: 12, paddingBottom: 12, zIndex: 3 },
   toast: { borderRadius: 20, backgroundColor: '#292929', borderWidth: 1, borderColor: WHITE[12], shadowColor: '#000', shadowOpacity: 0.38, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
-  content: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, paddingVertical: 13, minHeight: 76, borderRadius: 20 },
+  content: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingLeft: 14, paddingRight: 38, paddingVertical: 13, minHeight: 76, borderRadius: 20 },
+  close: { position: 'absolute', right: 7, top: 7, width: 24, height: 24, borderRadius: 12, backgroundColor: WHITE[12], alignItems: 'center', justifyContent: 'center' },
   logo: { width: 36, height: 36 },
   copy: { flex: 1, gap: 4 },
   title: { color: '#fff', fontSize: 14, lineHeight: 19, fontWeight: '500' },

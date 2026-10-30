@@ -9,10 +9,16 @@ import { MotionProvider, MotionView, MotionGradient, MotionPressable as Pressabl
 import { CalendarOverlay } from "./components/CalendarOverlay";
 import { formatRange, presetRange, sameDay, type DateRange } from "./components/dateRanges";
 import { AddFunds } from "./components/AddFunds";
+import { AddCard } from "./components/AddCard";
+import { CardsCarousel } from "./components/CardsCarousel";
+import { Records } from "./components/Records";
+import { INITIAL_CARDS, type WalletCard } from "./components/cards";
+import { Avatar } from "./components/Avatar";
 import { AIInsightToast, type AIInsight } from "./components/AIInsightToast";
 import { AccountCarousel } from "./components/AccountCarousel";
 import { GlassHeaderBackground } from "./components/GlassHeaderBackground";
 import { ExpenseDonut, TrendChart, EXPENSES } from "./components/Charts";
+import { CreditCardPlus, UserRoundPlus } from "./components/icons";
 import {
   Image,
   KeyboardAvoidingView,
@@ -29,18 +35,18 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type AuthScreen = "welcome" | "login" | "signup" | "app";
-type Tab = "wallet" | "recipients" | "cards" | "menu" | "ai";
+type Tab = "wallet" | "records" | "recipients" | "cards" | "menu" | "ai";
 
 const SURFACE = "#262626";
 const MUTED = WHITE[64];
 const AURELIA_LOGO = require("./assets/aurelia-logo.png");
 const recipients = [
-  ["Emily Johnson", "9638934867458", "👩🏻‍🎤"],
-  ["Charlotte Anderson", "9638934867458", "👩🏻‍💼"],
-  ["Christopher Wilson", "9638934867458", "👨🏽‍🎤"],
-  ["Isak Taylor", "9638934867458", "👨🏻‍🎨"],
-  ["Ava Brown", "9638934867458", "👩🏽‍🦱"],
-  ["Oliver Smith", "9638934867458", "👨🏻‍💻"],
+  ["Emily Johnson", "9638934867458"],
+  ["Charlotte Anderson", "9638934867458"],
+  ["Christopher Wilson", "9638934867458"],
+  ["Isak Taylor", "9638934867458"],
+  ["Ava Brown", "9638934867458"],
+  ["Oliver Smith", "9638934867458"],
 ];
 const suggestions = [
   "Visualize a dashboard summarizing spending trends for better insights",
@@ -109,7 +115,7 @@ function ActionButton({
       ]}
     >
       {!secondary && !white && <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={StyleSheet.absoluteFill} />}
-      {Icon && <Icon size={18} color={secondary ? "#fff" : "#111"} strokeWidth={1.8} />}
+      {Icon && <View style={styles.buttonIcon}><Icon size={compact ? 21 : 18} color={secondary ? "#fff" : "#111"} strokeWidth={compact ? 2.4 : 1.8} /></View>}
       <Text style={[styles.actionText, secondary && styles.secondaryText]}>{children}</Text>
     </Pressable>
   );
@@ -232,6 +238,8 @@ function AppContent() {
   const [signupStep, setSignupStep] = useState(0);
   const [sendStep, setSendStep] = useState<number | null>(null);
   const [addFundsOpen, setAddFundsOpen] = useState(false);
+  const [addCardOpen, setAddCardOpen] = useState(false);
+  const [cards, setCards] = useState<WalletCard[]>(INITIAL_CARDS);
   const [selectedPerson, setSelectedPerson] = useState(2);
   const [selectedCard, setSelectedCard] = useState(1);
   const [cardIndex, setCardIndex] = useState(0);
@@ -244,11 +252,13 @@ function AppContent() {
   const [headerScrolled, setHeaderScrolled] = useState(false);
   const blurTarget = useRef<ComponentRef<typeof View>>(null);
   const [selectedRange, setSelectedRange] = useState<DateRange>(() => presetRange("today"));
-  const dateLabel = sameDay(selectedRange.start, selectedRange.end)
-    ? selectedRange.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+  const [recordsRange, setRecordsRange] = useState<DateRange | null>(null);
+  const activeRange = tab === "records" && recordsRange ? recordsRange : selectedRange;
+  const dateLabel = tab === "records" && !recordsRange ? "All dates" : sameDay(activeRange.start, activeRange.end)
+    ? activeRange.start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
     : "Date range";
 
-  useEffect(() => { setHeaderScrolled(false); }, [auth, tab, sendStep, addFundsOpen]);
+  useEffect(() => { setHeaderScrolled(false); }, [auth, tab, sendStep, addFundsOpen, addCardOpen]);
   const trackHeaderScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = event.nativeEvent.contentOffset.y;
     setHeaderScrolled(current => offset > 16 || (current && offset > 4));
@@ -259,10 +269,22 @@ function AppContent() {
     setTab("wallet");
     setSendStep(null);
     setAddFundsOpen(false);
+    setAddCardOpen(false);
   };
   const openAddFunds = () => {
     setCalendarOpen(false);
     setAddFundsOpen(true);
+  };
+  const openAddCard = () => {
+    setCalendarOpen(false);
+    setAddCardOpen(true);
+  };
+  const saveCard = (card: WalletCard) => {
+    setCards(current => [...current.map(existing => card.isDefault ? { ...existing, isDefault: false } : existing), card]);
+    setCardIndex(cards.length);
+    setAddCardOpen(false);
+    setAddFundsOpen(false);
+    setTab("cards");
   };
   const startSignup = () => {
     setSignupStep(0);
@@ -381,12 +403,20 @@ function AppContent() {
     );
   }
 
+  if (addCardOpen) {
+    return <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
+      <StatusBar style="light" />
+      <Header title="Add new card" onBack={() => setAddCardOpen(false)} />
+      <AddCard onSave={saveCard} />
+    </SafeAreaView>;
+  }
+
   if (addFundsOpen) {
     return (
       <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
         <StatusBar style="light" />
         <Header title="Add funds" onBack={() => setAddFundsOpen(false)} />
-        <AddFunds />
+        <AddFunds onAddCard={openAddCard} />
       </SafeAreaView>
     );
   }
@@ -414,9 +444,9 @@ function AppContent() {
             {sendStep === 1 && <>
               <View style={styles.searchContainer}><Search size={17} color={MUTED} /><TextInput value={search} onChangeText={setSearch} placeholder="Search recipients" placeholderTextColor={MUTED} style={styles.searchBox} /></View>
               <Surface style={styles.recipientList}>
-                {recipients.filter(([name]) => name.toLowerCase().includes(search.toLowerCase())).map(([name, number, avatar], index) => (
+                {recipients.map(([name, number], index) => ({ name, number, index })).filter(({ name }) => name.toLowerCase().includes(search.toLowerCase())).map(({ name, number, index }) => (
                   <Pressable key={name} onPress={() => setSelectedPerson(index)} style={[styles.recipientRow, selectedPerson === index && styles.selectedRow]}>
-                    <Text style={styles.avatar}>{avatar}</Text>
+                    <Avatar name={name} />
                     <View style={styles.personCopy}><Text style={styles.personName}>{name}</Text><Text style={styles.subtle}>{number}</Text></View>
                     <View style={[styles.radio, selectedPerson === index && styles.radioSelected]}>{selectedPerson === index && <Check size={14} color="#111" strokeWidth={1.7} />}</View>
                   </Pressable>
@@ -438,7 +468,7 @@ function AppContent() {
             </>}
             {sendStep === 3 && <>
               <Label style={styles.summaryLabel}>Amount</Label><Text style={styles.summaryAmount}>€ 982.73</Text>
-              <Label style={styles.summaryLabel}>Recipient</Label><View style={styles.summaryPerson}><Text style={styles.avatar}>👩🏻‍🎤</Text><View><Text style={styles.personName}>{recipients[selectedPerson]?.[0] ?? "James Parker"}</Text><Text style={styles.subtle}>recipient@email.com</Text></View></View>
+              <Label style={styles.summaryLabel}>Recipient</Label><View style={styles.summaryPerson}><Avatar name={recipients[selectedPerson]?.[0] ?? "Christopher Wilson"} /><View><Text style={styles.personName}>{recipients[selectedPerson]?.[0] ?? "James Parker"}</Text><Text style={styles.subtle}>recipient@email.com</Text></View></View>
               <Label style={styles.summaryLabel}>Card selected</Label><View style={styles.summaryPerson}><LinearGradient colors={["#731ADF", "#34116A"]} style={styles.miniCard}><CreditCard size={28} color="#fff" /></LinearGradient><View><Text style={styles.personName}>Junior Card</Text><Text style={styles.subtle}>1204  ****  ****  3756</Text></View></View>
               <Surface style={styles.feeCard}>
                 <View style={styles.feeRow}><Label>Conversion Fee</Label><Label>$5.00</Label></View>
@@ -462,12 +492,14 @@ function AppContent() {
 
   const tabTitle: Record<Tab, string> = {
     wallet: "Wallet",
+    records: "Records",
     recipients: "Recipients",
     cards: "My cards",
     menu: "Menu",
     ai: "AI Chat",
   };
   const goToAI = () => setTab("ai");
+  const activeNavTab = tab === "recipients" ? "menu" : tab;
 
   return (
     <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
@@ -509,29 +541,19 @@ function AppContent() {
           </AccountCarousel>
         </Surface>
       </ScrollView>}
+      {tab === "records" && <Records bottomSpace={insightHeight + 16} onScroll={trackHeaderScroll} range={recordsRange} onClearRange={() => setRecordsRange(null)} />}
       {tab === "cards" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
-        <MotionView motionKey={cardIndex} distance={8} fromScale={0.98} style={styles.cardCarousel}>
-          <Pressable onPress={() => setCardIndex((cardIndex + 3) % 4)} style={[styles.sideCard, styles.sideCardLeft]} />
-          <LinearGradient colors={["#26152C", "#5C14D4", "#762CF0", "#78A6FF", "#FFEFF8"]} locations={[0, 0.4, 0.65, 0.82, 1]} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.visualCard}>
-            <View style={styles.rowBetween}><Text style={styles.cardName}>Junior Card</Text><View style={styles.mastercard}><View style={styles.mastercardRed} /><View style={styles.mastercardOrange} /></View></View>
-            <View style={styles.cardChip}><View style={styles.chipHorizontal} /><View style={styles.chipVertical} /></View>
-            <Text style={[styles.cardNumber, { fontSize: Math.min(20, (screenWidth - 90) * 0.066) }]}>1204  3756  3984  3756</Text>
-            <View style={styles.rowBetween}><Text style={styles.cardOwner}>Aurelia Kaizer</Text><Text style={styles.cardOwner}>14/28</Text></View>
-          </LinearGradient>
-          <Pressable onPress={() => setCardIndex((cardIndex + 1) % 4)} style={[styles.sideCard, styles.sideCardRight]} />
-        </MotionView>
-        <View style={styles.pagination}>{[0, 1, 2, 3].map((index) => <View key={index} style={[styles.paginationDot, index === cardIndex && styles.paginationActive]} />)}</View>
-        <Text style={styles.sectionCaption}>Card amount</Text><Text style={[styles.cardBalance, { fontSize: balanceSize }]}>$31,204<Text style={styles.balanceCents}>.94</Text></Text>
+        <CardsCarousel cards={cards} index={cardIndex} onSelect={setCardIndex} />
+        <Text style={styles.sectionCaption}>{cards[cardIndex].isDefault ? "Card amount · Default card" : "Card amount"}</Text><Text style={[styles.cardBalance, { fontSize: balanceSize }]}>${Math.floor(cards[cardIndex].balance).toLocaleString("en-US")}<Text style={styles.balanceCents}>.{cards[cardIndex].balance.toFixed(2).split(".")[1]}</Text></Text>
         <Text style={[styles.sectionCaption, styles.transactionHeader]}>Latest transactions</Text>
-        {["Electricity", "Electricity", "Electricity"].map((name, index) => <View style={styles.transaction} key={`${name}-${index}`}><View style={styles.transactionIcon}><ArrowUp size={24} color="#50B754" strokeWidth={1.6} /></View><View style={styles.personCopy}><Text style={styles.body}>{name}</Text><Text style={styles.subtle}>9:53 AM</Text></View><Text style={styles.body}>+4.000</Text></View>)}
-        <ActionButton icon={Plus} onPress={() => setTab("menu")}>Add new card</ActionButton>
+        {(cards[cardIndex].id.startsWith("card-") ? [] : ["Electricity", "Electricity", "Electricity"]).map((name, index) => <View style={styles.transaction} key={`${name}-${index}`}><View style={styles.transactionIcon}><ArrowUp size={24} color="#50B754" strokeWidth={1.6} /></View><View style={styles.personCopy}><Text style={styles.body}>{name}</Text><Text style={styles.subtle}>9:53 AM</Text></View><Text style={styles.body}>+4.000</Text></View>)}
+        {cards[cardIndex].id.startsWith("card-") && <Text style={[styles.subtle, { paddingVertical: 24 }]}>No transactions yet</Text>}
       </ScrollView>}
       {tab === "recipients" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
-        {["Asher Allen", "Amelia Archer", "Aaron Adams", "Ava Anderson", "Brandon Cole", ...recipients.map(([name]) => name)].map((name, index) => <View key={`${name}-${index}`} style={styles.transaction}><Text style={styles.avatar}>{recipients[index % recipients.length][2]}</Text><Text style={[styles.body, styles.personCopy]}>{name}</Text><Pressable accessibilityLabel={`More options for ${name}`} style={styles.moreButton}><MoreVertical size={18} color={MUTED} /></Pressable></View>)}
-        <ActionButton icon={Plus} onPress={() => setSendStep(0)}>Add recipient</ActionButton>
+        {["Asher Allen", "Amelia Archer", "Aaron Adams", "Ava Anderson", "Brandon Cole", ...recipients.map(([name]) => name)].map((name, index) => <View key={`${name}-${index}`} style={[styles.transaction, styles.recipientTransaction]}><Avatar name={name} /><Text style={[styles.body, styles.personCopy]}>{name}</Text><Pressable accessibilityLabel={`More options for ${name}`} style={styles.moreButton}><MoreVertical size={18} color={MUTED} /></Pressable></View>)}
       </ScrollView>}
       {tab === "menu" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
-        <View style={styles.profileRow}><Text style={styles.avatar}>👩🏼‍💼</Text><View style={styles.personCopy}><Text style={styles.cardTitle}>Aurelia Kaiser</Text><Text style={styles.subtle}>View profile</Text></View><View style={styles.period}><Pencil size={15} color="#fff" /><Text style={styles.periodText}>Edit</Text></View></View>
+        <View style={styles.profileRow}><Avatar name="Aurelia Kaiser" /><View style={styles.personCopy}><Text style={styles.cardTitle}>Aurelia Kaiser</Text><Text style={styles.subtle}>View profile</Text></View><View style={styles.period}><Pencil size={15} color="#fff" /><Text style={styles.periodText}>Edit</Text></View></View>
         {["Subscriptions", "Recipients", "Payments", "Utilities", "Shopping list", "Support", "FAQs", "Logout"].map((item, index) => <Pressable key={item} style={styles.menuItem} onPress={() => item === "Logout" ? setAuth("welcome") : item === "Recipients" ? setTab("recipients") : item === "Payments" ? setSendStep(0) : setTab("cards")}><MenuIcon index={index} /><View style={styles.menuItemCopy}><Text style={styles.body}>{item}</Text>{index === 0 || index === 4 ? <Text style={styles.menuCount}>{index === 0 ? "2" : "15"}</Text> : null}</View></Pressable>)}
       </ScrollView>}
       {tab === "ai" && <KeyboardAvoidingView style={styles.aiScreen} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={12}>
@@ -549,13 +571,13 @@ function AppContent() {
       </KeyboardAvoidingView>}
       </MotionView>
       </BlurTargetView>
-      <CalendarOverlay visible={calendarOpen} range={selectedRange} onApply={setSelectedRange} onClose={() => setCalendarOpen(false)} blurTarget={blurTarget} />
+      <CalendarOverlay visible={calendarOpen} range={activeRange} onApply={range => { setSelectedRange(range); if (tab === "records") setRecordsRange(range); }} onClose={() => setCalendarOpen(false)} blurTarget={blurTarget} />
       {tab !== "ai" && <View style={styles.navigationDock} onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)}>
         <View style={styles.bottomNav}>
-        {([["wallet", Wallet, "Wallet"], ["recipients", ArrowLeftRight, "Transfers"], ["add", Plus, "Add funds"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
-          <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} onPress={() => destination === "add" ? openAddFunds() : setTab(destination)} style={styles.navButton}>
-            {tab === destination && <MotionView duration={240} distance={0} fromScale={0.5} style={styles.navIndicator} />}
-            {destination === "add" ? <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.navSend}><Icon size={25} color="#111" strokeWidth={1.8} /></LinearGradient> : <Icon size={27} color={tab === destination ? GOLD : WHITE[48]} strokeWidth={2} />}
+        {([["wallet", Wallet, "Wallet"], ["records", ArrowLeftRight, "Records"], ["add", Plus, "Add funds"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
+          <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: activeNavTab === destination }} onPress={() => destination === "add" ? openAddFunds() : setTab(destination)} style={styles.navButton}>
+            {activeNavTab === destination && <MotionView duration={240} distance={0} fromScale={0.5} style={styles.navIndicator} />}
+            {destination === "add" ? <LinearGradient colors={GOLD_GRADIENT} locations={GOLD_STOPS} style={styles.navSend}><Icon size={25} color="#111" strokeWidth={1.8} /></LinearGradient> : <Icon size={27} color={activeNavTab === destination ? GOLD : WHITE[48]} strokeWidth={2} />}
           </Pressable>
         ))}
         </View>
@@ -564,9 +586,13 @@ function AppContent() {
       <Header
         floating scrolled={headerScrolled} blurTarget={blurTarget}
         title={tabTitle[tab]}
-        onBack={tab === "ai" ? () => setTab("wallet") : undefined}
+        onBack={tab === "ai" ? () => setTab("wallet") : tab === "recipients" ? () => setTab("menu") : undefined}
         onAI={goToAI}
-        right={<Pressable accessibilityRole="button" accessibilityLabel={`Choose date range, ${formatRange(selectedRange)}`} onPress={() => setCalendarOpen(true)} style={styles.dateControl}><CalendarDays size={18} color="#fff" /><Text style={styles.periodText}>{dateLabel}</Text></Pressable>}
+        right={tab === "ai" ? null : tab === "cards"
+          ? <Pressable accessibilityRole="button" accessibilityLabel="Add new card" onPress={openAddCard} style={styles.headerIconButton}><CreditCardPlus size={23} color="#fff" strokeWidth={1.8} /></Pressable>
+          : tab === "recipients"
+          ? <Pressable accessibilityRole="button" accessibilityLabel="Add contact" onPress={() => setSendStep(0)} style={styles.headerIconButton}><UserRoundPlus size={23} color="#fff" strokeWidth={1.8} /></Pressable>
+          : <Pressable accessibilityRole="button" accessibilityLabel={`Choose date range, ${formatRange(activeRange)}`} onPress={() => setCalendarOpen(true)} style={styles.dateControl}><CalendarDays size={18} color="#fff" /><Text style={styles.periodText}>{dateLabel}</Text></Pressable>}
       />
     </SafeAreaView>
   );
@@ -602,9 +628,6 @@ const styles = StyleSheet.create({
   searchContainer: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 16, borderWidth: 1, borderColor: WHITE[12], borderTopLeftRadius: 16, borderTopRightRadius: 16, backgroundColor: SURFACE },
   instructionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   facePreviewInner: { width: "90%", aspectRatio: 1, borderRadius: 125, backgroundColor: "#2B2B2B", alignItems: "center", justifyContent: "center" },
-  pagination: { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 28, marginTop: 8 },
-  paginationDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: WHITE[64] },
-  paginationActive: { backgroundColor: WHITE[64] },
   canvas: { flex: 1, backgroundColor: "#090909", alignItems: "center" },
   appFrame: { flex: 1, width: "100%", maxWidth: 440, overflow: "hidden" },
   whiteButton: { backgroundColor: "#fff" },
@@ -618,10 +641,6 @@ const styles = StyleSheet.create({
   activityStatDivider: { borderLeftWidth: 1, borderColor: WHITE[12], paddingLeft: 16, paddingRight: 0 },
   accountTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
   navIndicator: { position: "absolute", top: -18, height: 2, width: 40, backgroundColor: GOLD },
-  mastercardRed: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#EB001B" },
-  mastercardOrange: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#FFAA00", opacity: 0.92, marginLeft: -9 },
-  chipHorizontal: { position: "absolute", width: "100%", height: 11, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: "#8D753D" },
-  chipVertical: { width: 14, height: "100%", borderLeftWidth: 0.5, borderRightWidth: 0.5, borderColor: "#8D753D", borderRadius: 4 },
   feedback: { gap: 16, marginBottom: 16 },
   feedbackOptions: { alignSelf: "flex-start", flexDirection: "row", borderRadius: 20, borderWidth: 1, borderColor: WHITE[24], overflow: "hidden" },
   feedbackOption: { flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, paddingVertical: 8 },
@@ -642,9 +661,11 @@ const styles = StyleSheet.create({
   actionText: { color: "#111", fontSize: 15, fontWeight: "500" },
   secondaryButton: { borderWidth: 1.5, borderColor: WHITE[48], backgroundColor: "transparent", shadowOpacity: 0, elevation: 0 },
   secondaryText: { color: "#fff" },
-  compactButton: { width: "auto", alignSelf: "center", minWidth: 96 },
+  compactButton: { width: "auto", alignSelf: "center", minWidth: 120, paddingHorizontal: 20, gap: 9 },
+  buttonIcon: { width: 22, height: 22, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  recipientTransaction: { minHeight: 86 },
   pressed: { opacity: 0.78 },
-  orRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12, paddingHorizontal: 8, marginVertical: 8 },
+  orRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12, paddingHorizontal: 8, marginVertical: 18 },
   rule: { flex: 1, height: 1 },
   orText: { color: WHITE[48], fontSize: 11 },
   header: { minHeight: 64, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -652,6 +673,7 @@ const styles = StyleSheet.create({
   belowFloatingHeader: { paddingTop: 80 },
   headerSide: { width: 90, height: 40, justifyContent: "center" },
   headerRight: { alignItems: "flex-end" },
+  headerIconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 16, fontWeight: "500" },
   authContent: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 34 },
   display: { color: "#fff", fontFamily: "InstrumentSerif", fontSize: 32, lineHeight: 40 },
@@ -700,7 +722,6 @@ const styles = StyleSheet.create({
   recipientList: { padding: 7, marginBottom: 0 },
   recipientRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, padding: 9, minHeight: 67 },
   selectedRow: { borderWidth: 1, borderColor: WHITE[12], backgroundColor: "rgba(255,255,255,0.08)" },
-  avatar: { width: 48, height: 48, overflow: "hidden", textAlign: "center", textAlignVertical: "center", borderRadius: 13, backgroundColor: "#384f87", fontSize: 25 },
   personCopy: { flex: 1 },
   personName: { color: "#fff", fontSize: 16 },
   subtle: { color: WHITE[64], fontSize: 11, lineHeight: 16, marginTop: 4 },
@@ -742,16 +763,6 @@ const styles = StyleSheet.create({
   navButton: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
   navSend: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 9 } },
   tabContent: { paddingHorizontal: 20, paddingBottom: 28, flexGrow: 1 },
-  cardCarousel: { height: 216, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 20, marginHorizontal: -20 },
-  visualCard: { width: "79%", maxWidth: 320, aspectRatio: 1.56, borderRadius: 24, padding: 20, justifyContent: "space-between", shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 15 }, elevation: 8 },
-  sideCard: { width: 38, height: 180, borderRadius: 15 },
-  sideCardLeft: { backgroundColor: "#233ca5" },
-  sideCardRight: { backgroundColor: "#db3b4c" },
-  cardName: { color: "#fff", fontWeight: "600" },
-  mastercard: { width: 40, height: 24, flexDirection: "row" },
-  cardChip: { width: 35, height: 27, borderRadius: 5, backgroundColor: "#D5B568", alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 0.5, borderColor: "#8D753D" },
-  cardNumber: { color: "#fff", fontSize: 20, letterSpacing: 0 },
-  cardOwner: { color: "#fff", fontSize: 11 },
   sectionCaption: { color: MUTED, fontSize: 12, borderBottomWidth: 1, borderColor: WHITE[24], paddingBottom: 10, marginBottom: 12 },
   cardBalance: { color: "#fff", fontSize: 48, letterSpacing: -1.5, marginTop: 6, marginBottom: 22 },
   transactionHeader: { marginBottom: 0 },
