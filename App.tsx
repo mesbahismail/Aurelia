@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
+import { IOSPreviewBars, PreviewSafeArea } from "./components/IOSPreview";
 import { useEffect, useRef, useState, type RefObject, type ComponentRef } from "react";
 import { BlurTargetView } from "expo-blur";
 import { ArrowUp, ArrowDown, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, ScanFace, ScanLine, ChevronLeft, ChevronRight, MessageCircle, Wallet, CreditCard, Menu, Plus, Check, X, Smartphone, Landmark, MoreVertical, Pencil, Mic, Users, Clapperboard, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut, CalendarDays, ChartNoAxesColumn, ReceiptText, Info, Search, type LucideIcon } from "./components/icons";
@@ -16,10 +17,12 @@ import { INITIAL_CARDS, type WalletCard } from "./components/cards";
 import { Avatar } from "./components/Avatar";
 import { AIInsightToast, type AIInsight } from "./components/AIInsightToast";
 import { AccountCarousel } from "./components/AccountCarousel";
-import { GlassHeaderBackground } from "./components/GlassHeaderBackground";
+import { CardThumbnail } from "./components/CardVisual";
+import { GlassHeaderBackground, useBarInset } from "./components/GlassHeaderBackground";
 import { ExpenseDonut, TrendChart, EXPENSES } from "./components/Charts";
 import { CreditCardPlus, UserRoundPlus } from "./components/icons";
 import {
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -32,7 +35,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView, initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type AuthScreen = "welcome" | "login" | "signup" | "app";
 type Tab = "wallet" | "records" | "recipients" | "cards" | "menu" | "ai";
@@ -139,9 +142,10 @@ function Header({
   blurTarget?: RefObject<ComponentRef<typeof View> | null>;
 }) {
   const insets = useSafeAreaInsets();
+  const barInset = useBarInset(scrolled);
   return (
-    <View style={[styles.header, floating && styles.floatingHeader, floating && { top: insets.top + 8 }]}>
-      {floating && <GlassHeaderBackground active={scrolled} blurTarget={blurTarget} />}
+    <Animated.View style={[styles.header, floating && styles.floatingHeader, floating && { top: insets.top + 8, left: barInset, right: barInset }]}>
+      {floating && <GlassHeaderBackground active blurTarget={blurTarget} />}
       <Pressable accessibilityRole="button" accessibilityLabel={onBack ? "Go back" : "Open AI chat"} onPress={onBack ?? onAI} style={styles.headerSide}>
         {onBack ? <ChevronLeft size={28} color="#fff" strokeWidth={1.8} /> : <MessageCircle size={22} color="#fff" strokeWidth={1.8} />}
       </Pressable>
@@ -149,7 +153,7 @@ function Header({
       <View style={[styles.headerSide, styles.headerRight]}>
         {right}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -228,12 +232,11 @@ function Surface({ children, style, delay = 40 }: { children: React.ReactNode; s
   return <MotionGradient delay={delay} colors={["#282828", "#242424"]} style={[styles.surface, style]}>{children}</MotionGradient>;
 }
 
-function AppContent() {
+function AppContent({ auth, setAuth }: { auth: AuthScreen; setAuth: (screen: AuthScreen) => void }) {
   const { width: viewportWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const screenWidth = Math.min(viewportWidth, 440);
   const balanceSize = Math.min(48, (screenWidth - 64) * 0.146);
-  const [auth, setAuth] = useState<AuthScreen>("welcome");
   const [tab, setTab] = useState<Tab>("wallet");
   const [signupStep, setSignupStep] = useState(0);
   const [sendStep, setSendStep] = useState<number | null>(null);
@@ -247,9 +250,9 @@ function AppContent() {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [insightHeight, setInsightHeight] = useState(118);
-  const [navigationHeight, setNavigationHeight] = useState(84);
+  const [navigationHeight, setNavigationHeight] = useState(76);
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const navigationInset = useBarInset(headerScrolled);
   const blurTarget = useRef<ComponentRef<typeof View>>(null);
   const [selectedRange, setSelectedRange] = useState<DateRange>(() => presetRange("today"));
   const [recordsRange, setRecordsRange] = useState<DateRange | null>(null);
@@ -300,7 +303,8 @@ function AppContent() {
   if (auth === "welcome") {
     return (
       <LinearGradient colors={["#FFEEAF", "#FFDF4B", "#F2AD3C", "#D36221"]} locations={[0, 0.24, 0.48, 1]} style={styles.flex}>
-        <StatusBar style="light" />
+        <StatusBar style="dark" hidden={false} />
+        <SafeAreaView style={styles.flex} edges={["top", "bottom", "left", "right"]}>
         <ScrollView contentContainerStyle={styles.welcome} showsVerticalScrollIndicator={false}>
         <MotionView duration={650} distance={20} style={styles.brand}>
           <MotionView delay={60} duration={700} distance={0} fromScale={0.9} style={styles.brandMark}><Image source={AURELIA_LOGO} accessibilityLabel="Aurelia logo" style={styles.brandLogo} /></MotionView>
@@ -318,6 +322,7 @@ function AppContent() {
           <ActionButton onPress={startSignup} secondary>Sign up</ActionButton>
         </MotionView>
         </ScrollView>
+        </SafeAreaView>
       </LinearGradient>
     );
   }
@@ -457,10 +462,10 @@ function AppContent() {
               <Field boxed label="Total sending" value="$ 1,000" />
               <Label style={styles.sectionLabel}>Select card</Label>
               <Surface style={styles.recipientList}>
-                {["$23,480.52", "$7,430.52", "$7,480.52"].map((balance, index) => (
-                  <Pressable key={balance} onPress={() => setSelectedCard(index)} style={[styles.paymentRow, selectedCard === index && styles.selectedRow]}>
-                    <LinearGradient colors={index === 0 ? ["#55dfbd", "#3385d5"] : index === 1 ? ["#b953e8", "#f04a75"] : ["#ffd365", "#ef721f"]} style={styles.miniCard}><CreditCard size={22} color="#fff" strokeWidth={1.8} /></LinearGradient>
-                    <View style={styles.personCopy}><Text style={styles.amountText}>{balance}</Text><Text style={styles.subtle}>••••  ••••  ••••  3465</Text></View>
+                {cards.map((card, index) => (
+                  <Pressable key={card.id} accessibilityRole="radio" accessibilityState={{ checked: selectedCard === index }} accessibilityLabel={`${card.title}, ending ${card.last4}`} onPress={() => setSelectedCard(index)} style={[styles.paymentRow, selectedCard === index && styles.selectedRow]}>
+                    <CardThumbnail card={card} />
+                    <View style={styles.personCopy}><Text style={styles.amountText}>{card.balance.toLocaleString("en-US", { style: "currency", currency: "USD" })}</Text><Text style={styles.subtle}>••••  ••••  ••••  {card.last4}</Text></View>
                     <View style={[styles.radio, selectedCard === index && styles.radioSelected]}>{selectedCard === index && <Check size={14} color="#111" strokeWidth={1.7} />}</View>
                   </Pressable>
                 ))}
@@ -469,7 +474,7 @@ function AppContent() {
             {sendStep === 3 && <>
               <Label style={styles.summaryLabel}>Amount</Label><Text style={styles.summaryAmount}>€ 982.73</Text>
               <Label style={styles.summaryLabel}>Recipient</Label><View style={styles.summaryPerson}><Avatar name={recipients[selectedPerson]?.[0] ?? "Christopher Wilson"} /><View><Text style={styles.personName}>{recipients[selectedPerson]?.[0] ?? "James Parker"}</Text><Text style={styles.subtle}>recipient@email.com</Text></View></View>
-              <Label style={styles.summaryLabel}>Card selected</Label><View style={styles.summaryPerson}><LinearGradient colors={["#731ADF", "#34116A"]} style={styles.miniCard}><CreditCard size={28} color="#fff" /></LinearGradient><View><Text style={styles.personName}>Junior Card</Text><Text style={styles.subtle}>1204  ****  ****  3756</Text></View></View>
+              <Label style={styles.summaryLabel}>Card selected</Label><View style={styles.summaryPerson}><CardThumbnail card={cards[selectedCard]} /><View><Text style={styles.personName}>{cards[selectedCard].title}</Text><Text style={styles.subtle}>••••  ••••  ••••  {cards[selectedCard].last4}</Text></View></View>
               <Surface style={styles.feeCard}>
                 <View style={styles.feeRow}><Label>Conversion Fee</Label><Label>$5.00</Label></View>
                 <View style={styles.feeRow}><Label>Transfer Fee</Label><Label>2.5%</Label></View>
@@ -506,7 +511,7 @@ function AppContent() {
       <StatusBar style="light" />
       <BlurTargetView ref={blurTarget} style={styles.flex}>
       <MotionView style={styles.flex} motionKey={tab} distance={10} duration={300}>
-      {tab === "wallet" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.dashboard, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]} showsVerticalScrollIndicator={false}>
+      {tab === "wallet" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.dashboard, styles.belowFloatingHeader, { paddingBottom: navigationHeight + 20 }]} showsVerticalScrollIndicator={false}>
         <MotionGradient distance={16} duration={440} colors={["#292929", "#232323"]} style={styles.balanceCard}>
           <View style={styles.rowBetween}><View><Text style={styles.cardTitle}>Balance</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Add funds" onPress={openAddFunds} style={styles.addButton}><Plus size={14} color={GOLD} /><Text style={styles.goldText}>Add</Text></Pressable></View>
           <Text style={[styles.balanceAmount, { fontSize: balanceSize }]}>$238,219<Text style={styles.balanceCents}>.32</Text></Text>
@@ -541,20 +546,20 @@ function AppContent() {
           </AccountCarousel>
         </Surface>
       </ScrollView>}
-      {tab === "records" && <Records bottomSpace={insightHeight + 16} onScroll={trackHeaderScroll} range={recordsRange} onClearRange={() => setRecordsRange(null)} />}
-      {tab === "cards" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
+      {tab === "records" && <Records bottomSpace={navigationHeight + 20} onScroll={trackHeaderScroll} range={recordsRange} onClearRange={() => setRecordsRange(null)} />}
+      {tab === "cards" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: navigationHeight + 20 }]}>
         <CardsCarousel cards={cards} index={cardIndex} onSelect={setCardIndex} />
         <Text style={styles.sectionCaption}>{cards[cardIndex].isDefault ? "Card amount · Default card" : "Card amount"}</Text><Text style={[styles.cardBalance, { fontSize: balanceSize }]}>${Math.floor(cards[cardIndex].balance).toLocaleString("en-US")}<Text style={styles.balanceCents}>.{cards[cardIndex].balance.toFixed(2).split(".")[1]}</Text></Text>
         <Text style={[styles.sectionCaption, styles.transactionHeader]}>Latest transactions</Text>
         {(cards[cardIndex].id.startsWith("card-") ? [] : ["Electricity", "Electricity", "Electricity"]).map((name, index) => <View style={styles.transaction} key={`${name}-${index}`}><View style={styles.transactionIcon}><ArrowUp size={24} color="#50B754" strokeWidth={1.6} /></View><View style={styles.personCopy}><Text style={styles.body}>{name}</Text><Text style={styles.subtle}>9:53 AM</Text></View><Text style={styles.body}>+4.000</Text></View>)}
         {cards[cardIndex].id.startsWith("card-") && <Text style={[styles.subtle, { paddingVertical: 24 }]}>No transactions yet</Text>}
       </ScrollView>}
-      {tab === "recipients" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
+      {tab === "recipients" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: navigationHeight + 20 }]}>
         {["Asher Allen", "Amelia Archer", "Aaron Adams", "Ava Anderson", "Brandon Cole", ...recipients.map(([name]) => name)].map((name, index) => <View key={`${name}-${index}`} style={[styles.transaction, styles.recipientTransaction]}><Avatar name={name} /><Text style={[styles.body, styles.personCopy]}>{name}</Text><Pressable accessibilityLabel={`More options for ${name}`} style={styles.moreButton}><MoreVertical size={18} color={MUTED} /></Pressable></View>)}
       </ScrollView>}
-      {tab === "menu" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: insightHeight + 16 }]}>
+      {tab === "menu" && <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.tabContent, styles.belowFloatingHeader, { paddingBottom: navigationHeight + 20 }]}>
         <View style={styles.profileRow}><Avatar name="Aurelia Kaiser" /><View style={styles.personCopy}><Text style={styles.cardTitle}>Aurelia Kaiser</Text><Text style={styles.subtle}>View profile</Text></View><View style={styles.period}><Pencil size={15} color="#fff" /><Text style={styles.periodText}>Edit</Text></View></View>
-        {["Subscriptions", "Recipients", "Payments", "Utilities", "Shopping list", "Support", "FAQs", "Logout"].map((item, index) => <Pressable key={item} style={styles.menuItem} onPress={() => item === "Logout" ? setAuth("welcome") : item === "Recipients" ? setTab("recipients") : item === "Payments" ? setSendStep(0) : setTab("cards")}><MenuIcon index={index} /><View style={styles.menuItemCopy}><Text style={styles.body}>{item}</Text>{index === 0 || index === 4 ? <Text style={styles.menuCount}>{index === 0 ? "2" : "15"}</Text> : null}</View></Pressable>)}
+        {["Subscriptions", "Recipients", "Payments", "Utilities", "Shopping list", "Support", "FAQs", "Logout"].map((item, index) => <Pressable key={item} style={styles.menuItem} onPress={() => item === "Logout" ? setAuth("welcome") : item === "Recipients" ? setTab("recipients") : item === "Payments" ? setSendStep(0) : setTab("cards")}><MenuIcon index={index} /><View style={styles.menuItemCopy}><Text style={styles.body}>{item}</Text>{index === 0 || index === 4 ? <View style={[styles.menuCount, index === 0 && styles.menuCountSingle]}><Text style={styles.menuCountText}>{index === 0 ? "2" : "15"}</Text></View> : null}</View></Pressable>)}
       </ScrollView>}
       {tab === "ai" && <KeyboardAvoidingView style={styles.aiScreen} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={12}>
         <ScrollView onScroll={trackHeaderScroll} scrollEventThrottle={16} contentContainerStyle={[styles.aiContent, styles.belowFloatingHeader]} keyboardShouldPersistTaps="handled">
@@ -572,7 +577,8 @@ function AppContent() {
       </MotionView>
       </BlurTargetView>
       <CalendarOverlay visible={calendarOpen} range={activeRange} onApply={range => { setSelectedRange(range); if (tab === "records") setRecordsRange(range); }} onClose={() => setCalendarOpen(false)} blurTarget={blurTarget} />
-      {tab !== "ai" && <View style={styles.navigationDock} onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)}>
+      {tab !== "ai" && <Animated.View style={[styles.navigationDock, { left: navigationInset, right: navigationInset, bottom: insets.bottom + 8 }]} onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)}>
+        <GlassHeaderBackground active blurTarget={blurTarget} />
         <View style={styles.bottomNav}>
         {([["wallet", Wallet, "Wallet"], ["records", ArrowLeftRight, "Records"], ["add", Plus, "Add funds"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
           <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: activeNavTab === destination }} onPress={() => destination === "add" ? openAddFunds() : setTab(destination)} style={styles.navButton}>
@@ -581,8 +587,8 @@ function AppContent() {
           </Pressable>
         ))}
         </View>
-      </View>}
-      {tab !== "ai" && !calendarOpen && <AIInsightToast insights={aiInsights} bottom={navigationHeight + insets.bottom} onHeightChange={setInsightHeight} onOpen={(question) => { setPrompt(question); setTab("ai"); }} />}
+      </Animated.View>}
+      {tab !== "ai" && !calendarOpen && <AIInsightToast insights={aiInsights} bottom={navigationHeight + insets.bottom + 8} onOpen={(question) => { setPrompt(question); setTab("ai"); }} />}
       <Header
         floating scrolled={headerScrolled} blurTarget={blurTarget}
         title={tabTitle[tab]}
@@ -592,25 +598,30 @@ function AppContent() {
           ? <Pressable accessibilityRole="button" accessibilityLabel="Add new card" onPress={openAddCard} style={styles.headerIconButton}><CreditCardPlus size={23} color="#fff" strokeWidth={1.8} /></Pressable>
           : tab === "recipients"
           ? <Pressable accessibilityRole="button" accessibilityLabel="Add contact" onPress={() => setSendStep(0)} style={styles.headerIconButton}><UserRoundPlus size={23} color="#fff" strokeWidth={1.8} /></Pressable>
-          : <Pressable accessibilityRole="button" accessibilityLabel={`Choose date range, ${formatRange(activeRange)}`} onPress={() => setCalendarOpen(true)} style={styles.dateControl}><CalendarDays size={18} color="#fff" /><Text style={styles.periodText}>{dateLabel}</Text></Pressable>}
+          : <Pressable accessibilityRole="button" accessibilityLabel={`Choose date range, ${formatRange(activeRange)}`} onPress={() => setCalendarOpen(true)} style={styles.dateControl}><CalendarDays size={18} color="#fff" /><Text numberOfLines={1} style={[styles.headerTitle, styles.dateText]}>{dateLabel}</Text></Pressable>}
       />
     </SafeAreaView>
   );
 }
 
 export default function App() {
+  const [auth, setAuth] = useState<AuthScreen>("welcome");
   const [fontsLoaded, fontError] = useFonts({
     InstrumentSerif: require("./assets/fonts/InstrumentSerif-Regular.ttf"),
   });
 
   if (fontError) throw fontError;
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: "#191919" }} />;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: "#191919" }}><StatusBar style="light" hidden={false} /></View>;
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <StatusBar style="light" hidden={false} />
       <View style={styles.canvas}>
         <LinearGradient colors={DARK_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.appFrame}>
-          <MotionProvider><AppContent /></MotionProvider>
+          <PreviewSafeArea>
+            <MotionProvider><AppContent auth={auth} setAuth={setAuth} /></MotionProvider>
+            <IOSPreviewBars dark={auth === "welcome"} />
+          </PreviewSafeArea>
         </LinearGradient>
       </View>
     </SafeAreaProvider>
@@ -629,18 +640,19 @@ const styles = StyleSheet.create({
   instructionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   facePreviewInner: { width: "90%", aspectRatio: 1, borderRadius: 125, backgroundColor: "#2B2B2B", alignItems: "center", justifyContent: "center" },
   canvas: { flex: 1, backgroundColor: "#090909", alignItems: "center" },
-  appFrame: { flex: 1, width: "100%", maxWidth: 440, overflow: "hidden" },
+  appFrame: { flex: 1, width: "100%", ...Platform.select({ web: { maxWidth: 440 } }), overflow: "hidden" },
   whiteButton: { backgroundColor: "#fff" },
   welcomeDash: { width: 31, height: 5, backgroundColor: WHITE[48], marginBottom: 0, marginTop: 18 },
   inlineInfo: { flexDirection: "row", gap: 8, alignItems: "center", marginVertical: 2 },
   notificationDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GOLD, alignSelf: "center", marginTop: 6 },
-  dateControl: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 40 },
+  dateControl: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 40, maxWidth: "100%" },
+  dateText: { flexShrink: 1 },
   periodText: { color: "#fff", fontSize: 13 },
   chartCaption: { color: WHITE[64], fontSize: 11, lineHeight: 16, marginTop: 3, textAlign: "center" },
   activityStat: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 16 },
   activityStatDivider: { borderLeftWidth: 1, borderColor: WHITE[12], paddingLeft: 16, paddingRight: 0 },
   accountTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
-  navIndicator: { position: "absolute", top: -18, height: 2, width: 40, backgroundColor: GOLD },
+  navIndicator: { position: "absolute", top: -8, height: 2, width: 28, backgroundColor: GOLD },
   feedback: { gap: 16, marginBottom: 16 },
   feedbackOptions: { alignSelf: "flex-start", flexDirection: "row", borderRadius: 20, borderWidth: 1, borderColor: WHITE[24], overflow: "hidden" },
   feedbackOption: { flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, paddingVertical: 8 },
@@ -671,7 +683,7 @@ const styles = StyleSheet.create({
   header: { minHeight: 64, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   floatingHeader: { position: "absolute", left: 12, right: 12, minHeight: 56, borderRadius: 999, paddingHorizontal: 16, zIndex: 10 },
   belowFloatingHeader: { paddingTop: 80 },
-  headerSide: { width: 90, height: 40, justifyContent: "center" },
+  headerSide: { flex: 1, minWidth: 0, height: 40, justifyContent: "center" },
   headerRight: { alignItems: "flex-end" },
   headerIconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 16, fontWeight: "500" },
@@ -729,7 +741,6 @@ const styles = StyleSheet.create({
   radioSelected: { backgroundColor: GOLD, borderColor: GOLD },
   sectionLabel: { marginBottom: 10 },
   paymentRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, padding: 9, minHeight: 78 },
-  miniCard: { width: 80, height: 54, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   amountText: { color: "#fff", fontSize: 19 },
   summaryLabel: { borderBottomWidth: 1, borderBottomColor: WHITE[24], paddingBottom: 8, marginBottom: 8 },
   summaryAmount: { color: "#fff", fontSize: 24, marginBottom: 20 },
@@ -757,9 +768,9 @@ const styles = StyleSheet.create({
   accountCard: { width: 122, minHeight: 148, borderWidth: 1, borderColor: WHITE[12], borderRadius: 22, backgroundColor: "#333333", padding: 12, justifyContent: "space-between" },
   bankMark: { width: 40, height: 40, borderWidth: 1, borderColor: "rgba(255,173,22,0.48)", borderRadius: 20, backgroundColor: "rgba(255,173,22,0.12)", alignItems: "center", justifyContent: "center" },
   accountAmount: { color: "#fff", fontSize: 20, lineHeight: 28, fontWeight: "500" },
-  navigationDock: { position: "relative", zIndex: 2 },
+  navigationDock: { position: "absolute", zIndex: 2 },
   orbLogo: { width: "100%", height: "100%" },
-  bottomNav: { minHeight: 84, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-around", paddingHorizontal: 12, paddingTop: 16, paddingBottom: 14, borderTopWidth: 2, borderColor: WHITE[24], borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: "rgba(32,32,32,0.96)" },
+  bottomNav: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 8, paddingVertical: 12, borderRadius: 999 },
   navButton: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
   navSend: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 9 } },
   tabContent: { paddingHorizontal: 20, paddingBottom: 28, flexGrow: 1 },
@@ -771,7 +782,9 @@ const styles = StyleSheet.create({
   moreButton: { width: 32, height: 32, borderWidth: 1.5, borderColor: WHITE[24], borderRadius: 10, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 5, shadowOffset: { width: 0, height: 3 } },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 12 },
   menuItem: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 64 },
-  menuCount: { color: GOLD, borderWidth: 1, borderColor: GOLD, borderRadius: 14, padding: 4, marginLeft: "auto" },
+  menuCount: { minWidth: 28, height: 28, paddingHorizontal: 7, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,173,22,0.18)", backgroundColor: "rgba(255,173,22,0.07)", borderRadius: 14, marginLeft: "auto" },
+  menuCountSingle: { width: 28, paddingHorizontal: 0 },
+  menuCountText: { color: GOLD, fontSize: 12, fontWeight: "500", fontVariant: ["tabular-nums"] },
   aiScreen: { flex: 1 },
   aiContent: { paddingHorizontal: 16, paddingBottom: 16, flexGrow: 1 },
   aiGreeting: { minHeight: 305, alignItems: "center", justifyContent: "center", gap: 18 },

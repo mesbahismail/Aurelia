@@ -17,8 +17,22 @@ function polar(angle: number, radius: number) {
   return [80 + Math.cos(radians) * radius, 80 + Math.sin(radians) * radius];
 }
 function segment(start: number, end: number) {
-  const a = polar(start, 63), b = polar(end, 63);
-  return `M ${a[0]} ${a[1]} A 63 63 0 ${end - start > 180 ? 1 : 0} 1 ${b[0]} ${b[1]}`;
+  const outer = 77, inner = 49, corner = 3;
+  const outerInset = corner / outer * 180 / Math.PI;
+  const innerInset = corner / inner * 180 / Math.PI;
+  // Small corner curves soften each cut edge without closing the segment gaps.
+  return [
+    `M ${polar(start + outerInset, outer)}`,
+    `A ${outer} ${outer} 0 ${end - start - 2 * outerInset > 180 ? 1 : 0} 1 ${polar(end - outerInset, outer)}`,
+    `Q ${polar(end, outer)} ${polar(end, outer - corner)}`,
+    `L ${polar(end, inner + corner)}`,
+    `Q ${polar(end, inner)} ${polar(end - innerInset, inner)}`,
+    `A ${inner} ${inner} 0 ${end - start - 2 * innerInset > 180 ? 1 : 0} 0 ${polar(start + innerInset, inner)}`,
+    `Q ${polar(start, inner)} ${polar(start, inner + corner)}`,
+    `L ${polar(start, outer - corner)}`,
+    `Q ${polar(start, outer)} ${polar(start + outerInset, outer)}`,
+    'Z',
+  ].join(' ');
 }
 export function ExpenseDonut() {
   let angle = -90;
@@ -27,7 +41,7 @@ export function ExpenseDonut() {
       {EXPENSES.map(({ value, color, label }) => {
         const start = angle + 2.5;
         angle += value / 100 * 360;
-        return <Path key={label} d={segment(start, angle - 2.5)} fill="none" stroke={color} strokeWidth={28} strokeLinecap="butt" />;
+        return <Path key={label} d={segment(start, angle - 2.5)} fill={color} />;
       })}
     </Svg>
   </MotionView>;

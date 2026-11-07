@@ -1,6 +1,16 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
-import { CARD_THEMES, type CardTheme } from './cards';
+import { CARD_THEMES, type CardTheme, type WalletCard } from './cards';
+
+export function CardThumbnail({ card }: { card: WalletCard }) {
+  const width = 80;
+  const fullWidth = 280;
+  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width, height: width / 1.56, overflow: 'hidden', borderRadius: 7 }}>
+    <View style={{ position: 'absolute', width: fullWidth, height: fullWidth / 1.56, left: (width - fullWidth) / 2, top: (width - fullWidth) / 1.56 / 2, transform: [{ scale: width / fullWidth }] }}>
+      <CardVisual width={fullWidth} theme={card.theme} title={card.title} owner={card.owner} number={`••••  ••••  ••••  ${card.last4}`} expiry={card.expiry} />
+    </View>
+  </View>;
+}
 
 export function CardVisual({ width, theme = 'violet', title = 'Junior Card', owner, number, expiry }: {
   width: number; theme?: CardTheme; title?: string; owner: string; number: string; expiry: string;

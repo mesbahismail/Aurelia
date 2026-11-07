@@ -5,6 +5,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useReducedMotion } from './Motion';
 import { WHITE } from './theme';
 
+export function useBarInset(scrolled: boolean) {
+  const reduced = useReducedMotion();
+  const inset = useRef(new Animated.Value(scrolled ? 22 : 12)).current;
+  useEffect(() => {
+    const target = scrolled ? 22 : 12;
+    if (reduced) { inset.setValue(target); return; }
+    const animation = Animated.timing(inset, { toValue: target, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false });
+    animation.start();
+    return () => animation.stop();
+  }, [scrolled, reduced, inset]);
+  return inset;
+}
+
 export function GlassHeaderBackground({ active, blurTarget }: { active: boolean; blurTarget?: RefObject<ComponentRef<typeof View> | null> }) {
   const reduced = useReducedMotion();
   const opacity = useRef(new Animated.Value(active ? 1 : 0)).current;
@@ -33,5 +46,5 @@ export function GlassHeaderBackground({ active, blurTarget }: { active: boolean;
 
 const styles = StyleSheet.create({
   shadow: { borderRadius: 999, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
-  glass: { flex: 1, borderRadius: 999, overflow: 'hidden', borderWidth: 1, borderColor: WHITE[12], borderBottomColor: WHITE[24], borderBottomWidth: 1.5 },
+  glass: { flex: 1, borderRadius: 999, overflow: 'hidden', borderWidth: 1, borderColor: WHITE[12] },
 });

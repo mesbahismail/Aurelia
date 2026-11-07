@@ -72,12 +72,15 @@ test('custom ranges normalize reverse selection and format single days', () => {
 const records = loadLogic('transactionRecords.ts');
 test('records are grouped by day with the newest group first', () => {
   const groups = records.groupRecords(records.demoRecords(date(2026, 10, 30)));
-  assert.equal(groups.length, 3);
+  assert.equal(groups.length, 14);
   assert.equal(stamp(groups[0].date), '2026-10-30');
   assert.equal(stamp(groups[2].date), '2026-10-28');
+  assert.equal(stamp(groups[13].date), '2026-10-17');
   assert.equal(groups[0].records.length, 2);
   assert.equal(groups[1].records.length, 3);
-  assert.equal(groups[2].records.length, 2);
+  assert.equal(groups[2].records.length, 3);
+  assert.equal(groups[0].records[0].id, 'groceries');
+  assert.equal(groups[2].records[0].id, 'dinner');
 });
 test('record filtering includes every transaction on the last selected day', () => {
   const transactions = records.demoRecords(date(2026, 10, 30));
@@ -85,7 +88,7 @@ test('record filtering includes every transaction on the last selected day', () 
   assert.equal(today.length, 1);
   assert.equal(today[0].records.length, 2);
   const range = records.groupRecords(transactions, { start: date(2026, 10, 28), end: date(2026, 10, 29) });
-  assert.equal(range.reduce((count, group) => count + group.records.length, 0), 5);
+  assert.equal(range.reduce((count, group) => count + group.records.length, 0), 6);
   assert.equal(records.groupRecords(transactions, { start: date(2026, 11, 1), end: date(2026, 11, 2) }).length, 0);
 });
 test('record amounts distinguish deposits from expenses', () => {

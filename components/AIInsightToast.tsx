@@ -7,15 +7,15 @@ import { WHITE } from './theme';
 
 export type AIInsight = { title: string; detail: string; prompt: string };
 
-const CYCLE_MS = 30_000;
+const CYCLE_MS = 120_000;
+let nextAllowedAt = Date.now() + 20_000;
 const VISIBLE_MS = 3_000;
 const EXIT_MS = 200;
 
-export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
+export function AIInsightToast({ insights, bottom, onOpen }: {
   insights: readonly AIInsight[];
   bottom: number;
   onOpen: (prompt: string) => void;
-  onHeightChange: (height: number) => void;
 }) {
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -58,6 +58,7 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
       }).start(({ finished }) => { if (finished) setVisible(false); });
     };
     const show = () => {
+      nextAllowedAt = Date.now() + CYCLE_MS;
       expiresAt = Date.now() + VISIBLE_MS;
       setIndex(nextInsight.current % insights.length);
       nextInsight.current += 1;
@@ -84,10 +85,13 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
         setVisible(false);
       }, VISIBLE_MS);
     };
-    show();
-    const cycleTimer = setInterval(show, CYCLE_MS);
+    let cycleTimer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      cycleTimer = setTimeout(() => { show(); schedule(); }, Math.max(0, nextAllowedAt - Date.now()));
+    };
+    schedule();
     return () => {
-      clearInterval(cycleTimer);
+      clearTimeout(cycleTimer);
       clearTimeout(exitTimer);
       clearTimeout(hideTimer);
       reveal.stopAnimation();
@@ -104,7 +108,6 @@ export function AIInsightToast({ insights, bottom, onOpen, onHeightChange }: {
     accessibilityElementsHidden={!visible}
     importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
     style={[styles.overlay, { bottom, opacity: reveal }]}
-    onLayout={event => onHeightChange(event.nativeEvent.layout.height)}
   >
     <LinearGradient
       pointerEvents="none"

@@ -22,7 +22,7 @@ export function Records({ bottomSpace, onScroll, range, onClearRange }: {
       <Text style={s.date}>{groups.reduce((total, group) => total + group.records.length, 0)} records</Text>
       <Pressable accessibilityRole="button" accessibilityLabel="Show all records" onPress={onClearRange} style={s.clear}><Text style={s.clearText}>All dates</Text></Pressable>
     </View>}
-    {groups.map((group, groupIndex) => <MotionView key={group.date.getTime()} delay={groupIndex * 50} distance={8} style={s.group}>
+    {groups.map((group, groupIndex) => <MotionView key={group.date.getTime()} delay={Math.min(groupIndex * 50, 200)} distance={8} style={s.group}>
       <Text accessibilityRole="header" style={s.dateHeading}>{dateLabel(group.date)}</Text>
       {group.records.map(record => {
         const incoming = record.amount >= 0;
