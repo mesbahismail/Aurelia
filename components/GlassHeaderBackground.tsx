@@ -5,16 +5,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useReducedMotion } from './Motion';
 import { WHITE } from './theme';
 
-export function useBarInset(scrolled: boolean) {
+export function useBarInset(scrolled: boolean, restingInset = 12) {
   const reduced = useReducedMotion();
-  const inset = useRef(new Animated.Value(scrolled ? 22 : 12)).current;
+  const inset = useRef(new Animated.Value(restingInset + (scrolled ? 10 : 0))).current;
   useEffect(() => {
-    const target = scrolled ? 22 : 12;
+    const target = restingInset + (scrolled ? 10 : 0);
     if (reduced) { inset.setValue(target); return; }
     const animation = Animated.timing(inset, { toValue: target, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false });
     animation.start();
     return () => animation.stop();
-  }, [scrolled, reduced, inset]);
+  }, [scrolled, restingInset, reduced, inset]);
   return inset;
 }
 

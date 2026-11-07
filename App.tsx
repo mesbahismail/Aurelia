@@ -3,7 +3,7 @@ import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { IOSPreviewBars, PreviewSafeArea } from "./components/IOSPreview";
 import { useEffect, useRef, useState, type RefObject, type ComponentRef } from "react";
-import { BlurTargetView } from "expo-blur";
+import { BlurTargetView, BlurView } from "expo-blur";
 import { ArrowUp, ArrowDown, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, ScanFace, ScanLine, ChevronLeft, ChevronRight, MessageCircle, Wallet, CreditCard, Menu, Plus, Check, X, Smartphone, Landmark, MoreVertical, Pencil, Mic, Users, Clapperboard, Banknote, UtilityPole, ShoppingBasket, Headset, CircleHelp, LogOut, CalendarDays, ChartNoAxesColumn, ReceiptText, Info, Search, type LucideIcon } from "./components/icons";
 import { WHITE, GOLD, GOLD_GRADIENT, GOLD_STOPS, DARK_GRADIENT } from "./components/theme";
 import { MotionProvider, MotionView, MotionGradient, MotionPressable as Pressable } from "./components/Motion";
@@ -250,9 +250,8 @@ function AppContent({ auth, setAuth }: { auth: AuthScreen; setAuth: (screen: Aut
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [navigationHeight, setNavigationHeight] = useState(76);
+  const [navigationHeight, setNavigationHeight] = useState(84);
   const [headerScrolled, setHeaderScrolled] = useState(false);
-  const navigationInset = useBarInset(headerScrolled);
   const blurTarget = useRef<ComponentRef<typeof View>>(null);
   const [selectedRange, setSelectedRange] = useState<DateRange>(() => presetRange("today"));
   const [recordsRange, setRecordsRange] = useState<DateRange | null>(null);
@@ -577,8 +576,11 @@ function AppContent({ auth, setAuth }: { auth: AuthScreen; setAuth: (screen: Aut
       </MotionView>
       </BlurTargetView>
       <CalendarOverlay visible={calendarOpen} range={activeRange} onApply={range => { setSelectedRange(range); if (tab === "records") setRecordsRange(range); }} onClose={() => setCalendarOpen(false)} blurTarget={blurTarget} />
-      {tab !== "ai" && <Animated.View style={[styles.navigationDock, { left: navigationInset, right: navigationInset, bottom: insets.bottom + 8 }]} onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)}>
-        <GlassHeaderBackground active blurTarget={blurTarget} />
+      {tab !== "ai" && <View style={[styles.navigationDock, { bottom: insets.bottom }]} onLayout={event => setNavigationHeight(event.nativeEvent.layout.height)}>
+        <BlurView pointerEvents="none" tint="dark" intensity={65} style={StyleSheet.absoluteFill}
+          {...(Platform.OS === "android" ? { blurTarget, blurMethod: "dimezisBlurViewSdk31Plus" as const } : {})}
+        />
+        <LinearGradient pointerEvents="none" colors={["rgba(255,255,255,0.07)", "rgba(26,26,26,0.24)"]} style={StyleSheet.absoluteFill} />
         <View style={styles.bottomNav}>
         {([["wallet", Wallet, "Wallet"], ["records", ArrowLeftRight, "Records"], ["add", Plus, "Add funds"], ["cards", CreditCard, "Cards"], ["menu", Menu, "Menu"]] as const).map(([destination, Icon, label]) => (
           <Pressable key={destination} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: activeNavTab === destination }} onPress={() => destination === "add" ? openAddFunds() : setTab(destination)} style={styles.navButton}>
@@ -587,8 +589,8 @@ function AppContent({ auth, setAuth }: { auth: AuthScreen; setAuth: (screen: Aut
           </Pressable>
         ))}
         </View>
-      </Animated.View>}
-      {tab !== "ai" && !calendarOpen && <AIInsightToast insights={aiInsights} bottom={navigationHeight + insets.bottom + 8} onOpen={(question) => { setPrompt(question); setTab("ai"); }} />}
+      </View>}
+      {tab !== "ai" && !calendarOpen && <AIInsightToast insights={aiInsights} bottom={navigationHeight + insets.bottom} onOpen={(question) => { setPrompt(question); setTab("ai"); }} />}
       <Header
         floating scrolled={headerScrolled} blurTarget={blurTarget}
         title={tabTitle[tab]}
@@ -652,7 +654,7 @@ const styles = StyleSheet.create({
   activityStat: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 16 },
   activityStatDivider: { borderLeftWidth: 1, borderColor: WHITE[12], paddingLeft: 16, paddingRight: 0 },
   accountTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
-  navIndicator: { position: "absolute", top: -8, height: 2, width: 28, backgroundColor: GOLD },
+  navIndicator: { position: "absolute", top: -18, height: 2, width: 40, backgroundColor: GOLD },
   feedback: { gap: 16, marginBottom: 16 },
   feedbackOptions: { alignSelf: "flex-start", flexDirection: "row", borderRadius: 20, borderWidth: 1, borderColor: WHITE[24], overflow: "hidden" },
   feedbackOption: { flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, paddingVertical: 8 },
@@ -768,9 +770,9 @@ const styles = StyleSheet.create({
   accountCard: { width: 122, minHeight: 148, borderWidth: 1, borderColor: WHITE[12], borderRadius: 22, backgroundColor: "#333333", padding: 12, justifyContent: "space-between" },
   bankMark: { width: 40, height: 40, borderWidth: 1, borderColor: "rgba(255,173,22,0.48)", borderRadius: 20, backgroundColor: "rgba(255,173,22,0.12)", alignItems: "center", justifyContent: "center" },
   accountAmount: { color: "#fff", fontSize: 20, lineHeight: 28, fontWeight: "500" },
-  navigationDock: { position: "absolute", zIndex: 2 },
+  navigationDock: { position: "absolute", left: 0, right: 0, zIndex: 2, borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: "hidden" },
   orbLogo: { width: "100%", height: "100%" },
-  bottomNav: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 8, paddingVertical: 12, borderRadius: 999 },
+  bottomNav: { minHeight: 84, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-around", paddingHorizontal: 12, paddingTop: 16, paddingBottom: 14, borderTopWidth: 2, borderColor: WHITE[12], borderTopLeftRadius: 22, borderTopRightRadius: 22 },
   navButton: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
   navSend: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 9 } },
   tabContent: { paddingHorizontal: 20, paddingBottom: 28, flexGrow: 1 },
